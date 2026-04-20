@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>SE Survey — รายการงานในฐานข้อมูล</title>
+  <link rel="stylesheet" href="records.css">
+</head>
+<body>
+  <header class="hdr">
+    <h1>รายการงานในฐานข้อมูล</h1>
+    <div class="hdr-right">
+      <span id="conn-dot" class="conn-dot" title="สถานะ server"></span>
+      <span id="server-url" class="server-url"></span>
+    </div>
+  </header>
+
+  <section class="controls">
+    <input type="search" id="q" class="q" placeholder="ค้นหา เลขเคลม / เซอร์เวย์ / ผู้คีย์ / invoice...">
+    <select id="work-type" class="work-type">
+      <option value="">— ทุกประเภทงาน —</option>
+      <option value="งานต้น">งานต้น</option>
+      <option value="งานตาม">งานตาม</option>
+      <option value="งานรวม">งานรวม</option>
+      <option value="SESV">SESV</option>
+    </select>
+    <select id="status" class="work-type">
+      <option value="">— ทุกสถานะ —</option>
+      <option value="0">รอส่ง</option>
+      <option value="1">ส่งแล้ว</option>
+    </select>
+    <select id="page-size" class="page-size">
+      <option value="50">50 / หน้า</option>
+      <option value="100" selected>100 / หน้า</option>
+      <option value="250">250 / หน้า</option>
+      <option value="500">500 / หน้า</option>
+    </select>
+    <button id="refresh" class="btn">รีเฟรช</button>
+  </section>
+
+  <section class="controls controls-row2">
+    <label class="date-label">ตั้งแต่
+      <input type="date" id="from-date" class="date-input">
+    </label>
+    <label class="date-label">ถึง
+      <input type="date" id="to-date" class="date-input">
+    </label>
+    <button id="date-clear" class="btn btn-secondary" type="button">ล้างวันที่</button>
+    <span class="spacer"></span>
+    <button id="export-csv" class="btn" type="button">⬇ Export Excel</button>
+  </section>
+
+  <section class="summary">
+    <span id="summary-text">กำลังโหลด...</span>
+  </section>
+
+  <section class="table-wrap">
+    <table id="records-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>เวลา</th>
+          <th>เลขเคลม</th>
+          <th>เลขเซอร์เวย์</th>
+          <th>ผู้คีย์</th>
+          <th>ประเภทงาน</th>
+          <th>invoice_mix</th>
+          <th>iSurvey</th>
+          <th>การทำงาน</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+
+  <footer class="pager">
+    <button id="prev" class="btn">← ก่อนหน้า</button>
+    <span id="page-info" class="page-info">หน้า 1</span>
+    <button id="next" class="btn">ถัดไป →</button>
+  </footer>
+
+  <script src="records.js"></script>
+</body>
+</html>

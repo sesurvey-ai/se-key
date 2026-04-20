@@ -1,0 +1,276 @@
+/* ============================================================
+   SE Survey Helper — Floating Panel Styles
+   ============================================================ */
+
+#se-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 999999;
+  width: 300px;
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+  user-select: none;
+  transition: box-shadow 0.2s;
+}
+
+#se-panel:hover { box-shadow: 0 6px 28px rgba(0, 0, 0, 0.2); }
+
+/* --- Header --- */
+#se-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #1a73e8;
+  color: #fff;
+  cursor: move;
+}
+
+#se-panel-title  { font-weight: 600; font-size: 13px; letter-spacing: 0.3px; }
+
+.se-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.se-conn-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c1c7cd;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.se-conn-dot.se-conn-ok  { background: #34c759; }
+.se-conn-dot.se-conn-err { background: #ff3b30; }
+
+#se-panel-toggle {
+  font-size: 16px; font-weight: bold; cursor: pointer;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; transition: background 0.15s;
+}
+#se-panel-toggle:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* --- Body --- */
+#se-panel-body { padding: 12px 14px; }
+
+.se-row { margin-bottom: 10px; }
+.se-row:last-of-type { margin-bottom: 0; }
+
+.se-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.se-value {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s;
+  word-break: break-all;
+}
+
+.se-value.se-keyer { font-size: 12px; font-weight: 500; }
+
+/* Empty / waiting */
+.se-value.se-empty {
+  background: #f5f5f5;
+  color: #999;
+  border: 1px dashed #d0d0d0;
+  font-weight: 400;
+}
+/* Found / ok */
+.se-value.se-found {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+/* Duplicate with at least one "ส่งแล้ว" record — hard block (red) */
+.se-value.se-dup {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+/* Duplicate but all existing copies are "รอส่ง" — soft warn (orange) */
+.se-value.se-pending {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffb74d;
+}
+
+/* --- Radios + checkboxes --- */
+.se-radio-row,
+.se-check-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+.se-check-row { margin-top: 2px; }
+.se-radio,
+.se-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+.se-radio:hover,
+.se-check:hover { background: #f0f6ff; }
+.se-radio input,
+.se-check input { margin: 0; }
+
+/* Disabled radio — shown grayed out when a batch checkbox is active */
+.se-radio input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.se-radio:has(input:disabled) {
+  color: #999;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+/* --- Inputs --- */
+.se-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #c7d0da;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+  background: #fff;
+  color: #222;
+}
+.se-input:focus {
+  outline: none;
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* --- Dynamic list (งานรวม + SESV: add multiple numbers) --- */
+#se-mix-list,
+#se-sesv-list { display: flex; flex-direction: column; gap: 6px; }
+.se-mix-item,
+.se-sesv-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.se-mix-item .se-input,
+.se-sesv-item .se-input { flex: 1; min-width: 0; }
+.se-mix-remove,
+.se-sesv-remove {
+  flex-shrink: 0;
+  width: 26px;
+  height: 30px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: #c62828;
+  background: #ffebee;
+  border: 1px solid #ef9a9a;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.se-mix-remove:hover,
+.se-sesv-remove:hover { background: #ef9a9a; color: #fff; }
+.se-mix-add,
+.se-sesv-add {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #1a73e8;
+  background: #e8f0fe;
+  border: 1px dashed #1a73e8;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.se-mix-add:hover,
+.se-sesv-add:hover { background: #d2e3fc; }
+
+/* --- Submit-gate status (replaces manual save button) --- */
+.se-submit-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.se-submit-status #se-submit-icon { font-size: 14px; }
+.se-submit-status #se-submit-text { flex: 1; }
+
+.se-submit-idle      { background: #fff3e0; color: #e65100; border-color: #ffb74d; }
+.se-submit-pending   { background: #fff8e1; color: #b28704; border-color: #ffd54f; }
+.se-submit-confirmed { background: #e8f5e9; color: #2e7d32; border-color: #81c784; }
+.se-submit-busy      { background: #e3f2fd; color: #1565c0; border-color: #64b5f6; }
+
+/* --- Status (used for save flow + server errors; hidden when empty) --- */
+.se-status {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  text-align: center;
+  background: #fff3e0;
+  color: #e65100;
+  margin-top: 10px;
+}
+.se-status[hidden] { display: none; }
+.se-status.se-status-ok   { background: #e8f5e9; color: #2e7d32; }
+.se-status.se-status-warn { background: #fff3e0; color: #e65100; }
+.se-status.se-status-busy { background: #e3f2fd; color: #1565c0; }
+.se-status.se-status-err  { background: #ffebee; color: #c62828; }
+
+/* --- Open records button --- */
+.se-open-records {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  color: #555;
+  background: #f5f5f5;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.se-open-records:hover {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border-color: #1a73e8;
+}

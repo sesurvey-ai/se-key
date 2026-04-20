@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "eClaim3 Survey Helper",
+  "version": "0.3.7",
+  "description": "คีย์ข้อมูลงานสำรวจจากหน้า eClaim3 ส่งเข้า LAN API server",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://eclaim3.blueventuregroup.co.th/esurvey/*"
+      ],
+      "js": ["page-inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://eclaim3.blueventuregroup.co.th/esurvey/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SE Survey Helper settings"
+  },
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "se-key-server",
+  "version": "0.1.0",
+  "description": "Local LAN API server for SE Survey Helper",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "start:noenv": "node src/server.js",
+    "init-db": "node src/init-db.js",
+    "migrate": "node src/migrate-csv.js",
+    "test": "node --test src/*.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0"
+  }
+}
