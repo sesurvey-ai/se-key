@@ -1,68 +1,120 @@
 # eClaim3 Survey Helper — Chrome Extension
 
-Chrome Extension (Manifest V3) ฝังเข้าหน้า eClaim3 — อ่านเลขเคลม/เลขเซอร์เวย์/ผู้คีย์ ตรวจซ้ำ และส่งข้อมูลเข้า LAN API server
+Chrome Extension (Manifest V3) ฝังเข้าหน้า eClaim3 — อ่านเลขเคลม/เลขเซอร์เวย์/ผู้คีย์ ตรวจซ้ำ บันทึกเข้า LAN API server และส่งต่อไป iSurvey
 
 ## ติดตั้ง (unpacked)
 
 1. เปิด Chrome → `chrome://extensions` → เปิด **Developer mode**
 2. กด **Load unpacked** → เลือกโฟลเดอร์ `eclaim3-extension/` นี้
-3. กดไอคอน extension ที่ toolbar → ตั้งค่า **LAN server URL** (เช่น `http://192.168.1.10:3000`)
+3. กดไอคอน extension → ตั้งค่า:
+   - **LAN server URL** (เช่น `http://192.168.4.122:3100`)
+   - **API key** ตรงกับ `SE_KEY_API_KEY` ของ server
+   - มุมขวาบนของ popup มีวงกลมบอกสถานะ server (เขียว=OK / แดง=ล่ม / เทา=ยังไม่ ping)
 4. กด "ทดสอบ" เพื่อเช็คการเชื่อมต่อ → กด "บันทึก"
-5. เปิดหน้า eClaim3 → floating panel จะโผล่ขึ้นมามุมขวาบน
+5. เปิดหน้า eClaim3 → floating panel แบบ**ย่อ**จะโผล่มุมขวาบน (คลิก header เพื่อขยาย)
 
 ## ไฟล์
 
 ```
 eclaim3-extension/
-├── manifest.json    ← Manifest V3 config
-├── background.js    ← Service worker (proxy API calls — bypass mixed-content block)
-├── content.js       ← อ่าน DOM + floating panel + save flow
-├── content.css      ← สไตล์ panel
-├── popup.html       ← หน้าตั้งค่า (LAN server URL)
-├── popup.js
-└── icons/
+├── manifest.json      ← Manifest V3 config
+├── page-inject.js     ← MAIN-world: hook window.alert + MutationObserver จับ .swal-modal
+├── background.js      ← Service worker: fetch proxy + save-many-and-flush
+├── content.js         ← อ่าน DOM + floating panel + save flow + claim session + clear form
+├── content.css        ← สไตล์ panel (แคบ 170px, ย่อ default, submit-status dot)
+├── popup.html / popup.js  ← หน้าตั้งค่า (LAN URL + API key + วงสถานะ server + ปุ่ม 📋 ดูรายงาน)
+├── records.html + .js + .css ← หน้ารายงานในตัว extension
+├── icons/
+└── README.md
 ```
 
-## ทำไมต้องมี background.js
+## ทำไมต้องมี background.js + page-inject.js
 
-eClaim3 เป็น HTTPS แต่ LAN server เป็น HTTP → Chrome block mixed content fetch จากเนื้อหน้า
-แก้โดยให้ content script ส่งข้อความผ่าน `chrome.runtime.sendMessage` ไปให้ background service worker
-ซึ่งยิง `fetch` เอง (ไม่โดน mixed-content rule)
+- **background.js**: eClaim3 เป็น HTTPS แต่ LAN server เป็น HTTP → Chrome block mixed content. Content script ส่ง `chrome.runtime.sendMessage` ไป background worker ซึ่งยิง fetch เอง (ไม่โดน mixed-content) + ประกัน reliability: การ save + send-isurvey ทำครบใน background แม้ content script ถูกทำลายจาก page navigation
+- **page-inject.js** (MAIN-world, document_start): hook `window.alert` + สังเกต `.swal-modal` ตั้งแต่ระดับหน้า เพราะ content script ที่ document_idle โหลดทีหลัง จับไม่ทัน
+
+## Save flow
+
+### กด "บันทึกราคา" (`#btnSurvey_Update`)
+- Save row(s) ลง DB เป็น `isurvey_sent=0` (รอส่ง) — ไม่ส่ง iSurvey
+- รองรับกดซ้ำเพื่อแก้ไขข้อมูล (upsert: UPDATE pending row เดิม ไม่สร้างซ้ำ)
+- Panel แสดงสถานะ 🟠 "บันทึกแล้ว รอส่งงาน" (พื้นส้ม)
+
+### กด "ส่งงานใหม่" (`#wuFlow1_cmdSendNew`)
+- Save row(s) ของหน้าปัจจุบัน
+- Background ยิง iSurvey สำหรับ **ทุก `(claim, survey)` ที่อยู่ใน claim session** → flip เป็น `isurvey_sent=1`
+- Panel แสดงสถานะ 🟢 "ส่งงานแล้ว" (พื้นเขียว)
+
+### Claim session (sessionStorage `se-claim-session`)
+- เริ่มใหม่เมื่อเปิดเคลมอื่น
+- สะสม survey_no จากการคลิก "บันทึกราคา" + "ส่งงานใหม่"
+- "ส่งงานใหม่" ส่ง iSurvey เฉพาะ survey ในลิสต์นี้ — ไม่ยุ่งกับ row ค้างเก่าของเคลมเดียวกัน
+
+### Batch (งานรวม / SESV)
+- เปิด checkbox → ช่อง input list (เพิ่มได้หลาย invoice ด้วยปุ่ม +)
+- กดบันทึกครั้งเดียวได้ N+1 row:
+  - 1 primary: claim + page's survey, work_type = baseType (งานต้น/งานตาม)
+  - N follow-up: claim + invoice_value, work_type = "งานตาม", invoice_mix = page's survey
 
 ## พฤติกรรม
 
-| สถานการณ์ | สีป้าย |
+### Label เหนือช่องเลขเคลม / เลขเซอร์เวย์
+
+| สถานการณ์ | label + สี |
 |---|---|
-| ยังโหลดหน้าไม่เสร็จ | เทา "รอข้อมูล..." |
-| เลขเคลมใหม่ | เขียว |
-| เลขเคลมซ้ำ | แดง "มีเลขเคลมนี้แล้ว" |
-| เลขเซอร์เวย์ใหม่ | เขียว |
-| เลขเซอร์เวย์ซ้ำ | แดง → ต้องเลือก **งานรวม** หรือ **SESV** ถึงจะบันทึกได้ |
-| server เชื่อมไม่ได้ | status bar ส้ม/แดง |
+| ยังโหลดหน้าไม่เสร็จ | "เลขเคลม" / "เลขเซอร์เวย์" — เทา "รอข้อมูล..." |
+| ไม่ซ้ำ | "เลขเคลม" / "เลขเซอร์เวย์" — เขียว |
+| ซ้ำ (มีแต่ "รอส่ง") | **"เลขเคลม (รอส่ง)"** / **"เลขเซอร์เวย์ (รอส่ง)"** — ส้ม (ยังบันทึกต่อได้) |
+| ซ้ำ (มี "ส่งแล้ว") | **"เลขเคลม (ส่งแล้ว)"** / **"เลขเซอร์เวย์ (ส่งแล้ว)"** — แดง (ต้องใช้ SESV/งานรวม หรือแก้ที่ admin) |
 
-## Flow ตอนกด "บันทึกข้อมูล"
+### Submit status — แสดงพร้อมกัน 2 จุด
+- **แถบสีล่าง panel** (ข้อความ + icon)
+- **วงสถานะบน header** (ข้างปุ่ม `—`) — mirror สีเดียวกัน เห็นได้แม้ panel ย่อ
 
-1. `POST /api/records` → ได้ record id
-2. `POST /api/send-isurvey {id}` → server ตัดสินใจว่าส่ง iSurvey หรือไม่ (SESV = ไม่ส่ง)
-3. เคลียร์ช่อง mix/sesv และ re-check dup
+| วง / แถบ | ความหมาย |
+|---|---|
+| 🔴 "ยังไม่ได้ส่ง" | idle — รอบนี้ยังไม่กดอะไร |
+| 🟡 "รอ popup" | คลิก eClaim3 แล้ว รอ alert/swal |
+| ⏳ "กำลังบันทึก..." | background กำลังยิง POST |
+| 🟠 "รอส่งงาน" | หลังกด "บันทึกราคา" สำเร็จ (row อยู่ใน DB แบบ `isurvey_sent=0`) |
+| 🟢 "ส่งงานแล้ว" | หลังกด "ส่งงานใหม่" สำเร็จ (flip เป็น `isurvey_sent=1`) |
+
+### Panel UI
+- **แคบ 170px, ย่อเป็น default** — คลิก header เพื่อขยาย ลากย้ายได้
+- **ปุ่ม 🧹 (broom)** บน header — ล้างค่า 29 ช่องฟอร์ม eClaim3 (จำนวน/ราคา/ประกัน/รายละเอียด) ในคลิกเดียว
+- **ปุ่ม 📋** ใต้แถบสถานะ — เปิดหน้ารายงาน records.html
 
 ## DOM selectors ที่ extension อ่าน
 
 | ข้อมูล | selector |
 |---|---|
-| เลขเคลม     | `#lblRef_Claim_No` |
-| เลขเซอร์เวย์ | `#txtBill_No` |
-| ผู้คีย์      | `#wuHeadUser1_lblUser_Name` |
+| เลขเคลม       | `#lblRef_Claim_No` |
+| เลขเซอร์เวย์   | `#txtBill_No` |
+| ผู้คีย์         | `#wuHeadUser1_lblUser_Name` |
+| ประเภทงาน (auto) | `#ddlAdd_No` (=`1` → งานต้น; อื่น → งานตาม) |
+| ปุ่ม "บันทึกราคา"  | `#btnSurvey_Update` |
+| ปุ่ม "ส่งงานใหม่"  | `#wuFlow1_cmdSendNew` |
 
 ## Versions
 
-- **0.2.8** — Web-submit gate: ปุ่ม "บันทึกข้อมูล" manual ถูกลบ, panel auto-save **หลัง** user คลิก `#wuFlow1_cmdSendNew` บนเว็บ + SweetAlert success popup โผล่ + user กด OK — กันการโกง "บันทึก panel ก่อนส่งเว็บ"
-- **0.2.7** — auto-select งานต้น/งานตาม จาก `#ddlAdd_No`; เปลี่ยน งานรวม/SESV เป็น checkbox (uncheck → enable radio กลับ); เมื่อ checkbox เลือกอยู่ radio จะถูก disable
-- **0.2.6** — สลับคอลัมน์ DB สำหรับงานรวม/SESV: `survey_no` = ค่าที่ user กรอก (ส่ง iSurvey), `invoice_mix` = เลขเซอร์เวย์จาก DOM; migrate ข้อมูลเก่า 3,410 แถวแล้ว
-- **0.2.5** — SESV เปลี่ยนเป็นรูปแบบเดียวกับงานรวม (list + ➕ + batch) และตอนนี้ส่ง iSurvey ด้วย (survey_no = invoice_mix); radio label "SESV IV" → "SESV"
-- **0.2.4** — งานรวม: ปุ่ม ➕ เพิ่มช่องได้หลายเลข กดบันทึกครั้งเดียวส่งรวดเดียว
-- **0.2.3** — เปลี่ยน "เชื่อมต่อ server แล้ว" เป็นวงกลมสีที่ header; status bar ซ่อนเมื่อไม่มีข้อความ
-- **0.2.2** — popup มี build tag + status always-visible + route test ผ่าน background worker
-- **0.2.1** — จำกัด matches เป็น `/esurvey/*` เท่านั้น (ไม่โผล่ใน popup `/EMCSReport/*`)
-- **0.2.0** — UI เต็ม (radio/inputs/save), popup settings, background service worker, API integration
-- **0.1.0** — prototype อ่าน DOM + floating panel เฉยๆ
+- **0.3.28** — Dup label กระชับ: "เลขเคลม (ส่งแล้ว)" / "เลขเคลม (รอส่ง)" / "เลขเซอร์เวย์ (ส่งแล้ว)" / "เลขเซอร์เวย์ (รอส่ง)"
+- **0.3.27** — ปุ่ม 🧹 Clear form บน header — ล้าง 29 ช่อง (จำนวน/ราคา/ประกัน/รายละเอียด) + dispatch input+change
+- **0.3.26** — เอาวงสถานะ server ออกจาก panel header (server status เหลือเฉพาะใน popup)
+- **0.3.25** — เพิ่ม Submit-status dot บน panel header — mirror สีเดียวกับแถบล่าง เห็นได้แม้ panel ย่อ
+- **0.3.24** — Popup เพิ่มวงสถานะ server มุมขวาบน (auto ping `/api/health` ตอนเปิด); panel **ย่อเป็น default**; ตัด opacity ออก
+- **0.3.23** — Submit status text กระชับ: "ยังไม่ได้ส่ง", "รอ popup", "รอส่งงาน"; opacity 35%
+- **0.3.22** — Width 200→170px; opacity 50% + hover → opacity 1.0
+- **0.3.21** — Compact panel: 300→200px + ลด padding/font ทุกจุด
+- **0.3.20** — Claim session tracking: "ส่งงานใหม่" ส่ง iSurvey เฉพาะ `(claim, survey)` ที่ user save ในรอบนี้ ไม่เกี่ยวกับ row ค้างเก่า
+- **0.3.19** — `save-many-and-flush`: flush pending iSurvey ทั้ง claim (ถูกแทนที่ใน 0.3.20 ด้วย session-scoped)
+- **0.3.18** — `save-and-send` op ใน background: save + send-isurvey คู่กันใน background → reliable ข้าม content-script teardown
+- **0.3.17** — popup เพิ่มปุ่ม "📋 ดูรายงาน" เปิด records.html
+- **0.3.16** — Batch flow ฟิกซ์: งานรวม/SESV สร้าง N+1 row ในคลิกเดียว (primary + N follow-up)
+- **0.3.15** — Fire-on-click: save ยิงทันทีที่คลิกปุ่ม eClaim3 ผ่าน background — ไม่รอ alert/swal confirmation (reliable ข้าม ASP.NET postback)
+- **0.3.14** — sessionStorage tracking: persist click + alert/swal events ข้าม page reload
+- **0.3.13** — dup logic ผ่อน: allow บันทึก/ส่ง เมื่อมีแค่ dup "รอส่ง" (block เฉพาะมี "ส่งแล้ว")
+- **0.3.12** — Submit status 🟠 "บันทึกแล้ว รอส่งงาน" / 🟢 "ส่งงานแล้ว"
+- **0.3.x earlier** — sessionStorage persist ข้าม ASP.NET postback reloads
+- **0.2.8** — Web-submit gate: panel auto-save หลัง user คลิก submit ของ eClaim3 + popup success
+- **0.2.x** — UI เต็ม, batch งานรวม/SESV, popup settings, background proxy, ปรับ column mapping
+- **0.1.0** — prototype อ่าน DOM + floating panel

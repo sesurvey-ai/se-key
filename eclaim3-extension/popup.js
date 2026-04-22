@@ -4,14 +4,23 @@ const DEFAULT_SERVER = 'http://localhost:3000';
 
 console.log('[popup] popup.js loaded', BUILD);
 
-const verEl     = document.getElementById('ver');
-const urlInput  = document.getElementById('serverUrl');
-const keyInput  = document.getElementById('apiKey');
-const statusEl  = document.getElementById('status');
-const testBtn   = document.getElementById('test');
-const saveBtn   = document.getElementById('save');
+const verEl      = document.getElementById('ver');
+const connDot    = document.getElementById('popup-conn-dot');
+const urlInput   = document.getElementById('serverUrl');
+const keyInput   = document.getElementById('apiKey');
+const statusEl   = document.getElementById('status');
+const testBtn    = document.getElementById('test');
+const saveBtn    = document.getElementById('save');
+const recordsBtn = document.getElementById('records');
 
 if (verEl) verEl.textContent = BUILD;
+
+function setConnDot(kind) {
+  if (!connDot) return;
+  connDot.classList.remove('ok', 'err');
+  if (kind === 'ok')  connDot.classList.add('ok');
+  if (kind === 'err') connDot.classList.add('err');
+}
 
 function setStatus(text, kind) {
   statusEl.textContent = text;
@@ -27,8 +36,16 @@ chrome.storage.local.get(
     urlInput.value = serverUrl;
     keyInput.value = apiKey;
     setStatus(`URL: ${serverUrl} — key: ${apiKey ? '(ตั้งไว้)' : '(ไม่มี)'}`, 'busy');
+    pingHealth();
   }
 );
+
+async function pingHealth() {
+  try {
+    const resp = await sendToBackground({ kind: 'se-api', op: 'health' });
+    setConnDot(resp && resp.ok ? 'ok' : 'err');
+  } catch { setConnDot('err'); }
+}
 
 const normalize = (s) => String(s || '').trim().replace(/\/+$/, '');
 
@@ -55,14 +72,17 @@ testBtn.addEventListener('click', async () => {
     await new Promise((r) => chrome.storage.local.set({ serverUrl: url, apiKey }, r));
 
     const resp = await sendToBackground({ kind: 'se-api', op: 'health' });
-    if (!resp)      return setStatus('ไม่มี response จาก background', 'err');
+    if (!resp)      { setConnDot('err'); return setStatus('ไม่มี response จาก background', 'err'); }
     if (!resp.ok) {
+      setConnDot('err');
       if (resp.status === 401) return setStatus('API key ผิด (HTTP 401)', 'err');
       return setStatus(`เชื่อมไม่ได้: ${resp.error || resp.status}`, 'err');
     }
     const rows = (resp.body && resp.body.rows != null) ? resp.body.rows : '?';
+    setConnDot('ok');
     setStatus(`เชื่อมได้ ✓ (rows = ${rows})`, 'ok');
   } catch (err) {
+    setConnDot('err');
     setStatus(`error: ${err.message}`, 'err');
   }
 });
@@ -75,4 +95,9 @@ saveBtn.addEventListener('click', () => {
   chrome.storage.local.set({ serverUrl: url, apiKey }, () => {
     setStatus(`บันทึกแล้ว ✓ → ${url} ${apiKey ? '+ key' : '(ไม่มี key)'}`, 'ok');
   });
+});
+
+recordsBtn.addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('records.html') });
+  window.close();
 });

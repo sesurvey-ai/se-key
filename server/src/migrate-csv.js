@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 import { db, initSchema } from './db.js';
 
-const CSV_PATH = process.argv[2] || '/tmp/sheet.csv';
+const CSV_PATH = process.argv[2] || path.join(os.tmpdir(), 'sheet.csv');
 
 if (!fs.existsSync(CSV_PATH)) {
   console.error(`CSV not found: ${CSV_PATH}`);

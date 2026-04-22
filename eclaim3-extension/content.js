@@ -27,7 +27,8 @@
     <div id="se-panel-header">
       <span id="se-panel-title">SE SURVEY</span>
       <span class="se-header-right">
-        <span id="se-conn-dot" class="se-conn-dot" title="สถานะ server"></span>
+        <button id="se-panel-clear" type="button" title="ล้างค่าฟอร์ม eClaim3">🧹</button>
+        <span id="se-submit-dot" class="se-submit-dot se-submit-idle" title="สถานะส่งงาน"></span>
         <span id="se-panel-toggle">—</span>
       </span>
     </div>
@@ -66,18 +67,19 @@
         </div>
         <button type="button" id="se-sesv-add" class="se-sesv-add">+ เพิ่มอีกเลข</button>
       </div>
-      <div class="se-row">
-        <label class="se-label">ผู้คีย์</label>
-        <div id="se-keyer" class="se-value se-empty se-keyer">รอข้อมูล...</div>
+      <div class="se-row se-keyer-row">
+        <span class="se-keyer-label">ผู้คีย์:</span>
+        <span id="se-keyer" class="se-keyer-name se-empty">รอข้อมูล...</span>
       </div>
-      <div id="se-submit-status" class="se-submit-status se-submit-idle">
-        <span id="se-submit-icon">🔴</span>
-        <span id="se-submit-text">ยังไม่ได้ส่งงานบนเว็บ</span>
+      <div class="se-submit-row">
+        <div id="se-submit-status" class="se-submit-status se-submit-idle">
+          <span id="se-submit-icon">🔴</span>
+          <span id="se-submit-text">ยังไม่ได้ส่ง</span>
+        </div>
+        <button type="button" id="se-open-records" class="se-open-records"
+                title="ดูรายการในฐานข้อมูล">📋</button>
       </div>
       <div id="se-status" class="se-status" hidden></div>
-      <button type="button" id="se-open-records" class="se-open-records">
-        📋 ดูรายการในฐานข้อมูล
-      </button>
     </div>
   `;
   document.body.appendChild(panel);
@@ -92,7 +94,6 @@
     header:      $('se-panel-header'),
     body:        $('se-panel-body'),
     toggle:      $('se-panel-toggle'),
-    connDot:     $('se-conn-dot'),
     claimLabel:  $('se-claim-label'),
     claim:       $('se-claim'),
     surveyLabel: $('se-survey-label'),
@@ -110,6 +111,8 @@
     submitStatus: $('se-submit-status'),
     submitIcon:   $('se-submit-icon'),
     submitText:   $('se-submit-text'),
+    submitDot:    $('se-submit-dot'),
+    clearBtn:     $('se-panel-clear'),
     status:      $('se-status'),
     openRecords: $('se-open-records'),
   };
@@ -138,18 +141,41 @@
     claimSent:   false,         // true if any existing claim_no match is isurvey_sent=1
     surveyDup:   false,
     surveySent:  false,         // same for survey_no
-    canSend:     false,
-    saving:      false,
-    // Web-submit gate — panel auto-saves only after user clicks the eClaim3
-    // submit button AND the success popup appears AND user clicks OK.
-    //   source: 'new'    → #wuFlow1_cmdSendNew → save + send iSurvey
-    //           'update' → #btnSurvey_Update   → save only (isurvey_sent=0, "รอส่ง")
-    webClickedAt:    null,      // timestamp of last submit-button click
-    webClickSource:  null,      // 'new' | 'update' | null
-    webConfirmedAt:  null,      // timestamp when success popup appeared
-    autoFiring:      false,     // guard against double auto-fire
+    lastSavedAt:     null,      // timestamp of last click-fire on current claim
+    lastSavedSrc:    null,      // 'new' | 'update' — which button produced the save
+    lastSavedClaim:  null,      // claim_no for which lastSaved applies
     lastChecked: { claim: null, survey: null },
   };
+
+  // --- Last-saved UI feedback, persisted across ASP.NET postback reloads ---
+  // Click handler paints 🟠/🟢 in the submit status on click; we persist so
+  // the color survives the chain of postback reloads that follow. Cleared
+  // when the user navigates to a different claim.
+  const SE_LAST_SAVED_KEY = 'se-last-saved';
+  const LAST_SAVED_TTL_MS = 5 * 60_000;
+
+  function persistLastSaved(src, claim_no) {
+    try {
+      sessionStorage.setItem(SE_LAST_SAVED_KEY, JSON.stringify({
+        at: Date.now(), src, claim_no,
+      }));
+    } catch (_) { /* ignore */ }
+  }
+
+  (function restoreLastSavedOnLoad() {
+    try {
+      const raw = sessionStorage.getItem(SE_LAST_SAVED_KEY);
+      if (!raw) return;
+      const ls = JSON.parse(raw);
+      if (!ls || !ls.at || Date.now() - ls.at > LAST_SAVED_TTL_MS) {
+        sessionStorage.removeItem(SE_LAST_SAVED_KEY);
+        return;
+      }
+      state.lastSavedAt    = ls.at;
+      state.lastSavedSrc   = ls.src;
+      state.lastSavedClaim = ls.claim_no;
+    } catch (_) { /* ignore */ }
+  })();
 
   // If the server URL changes in settings, re-ping and re-run the dup check.
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -160,12 +186,47 @@
   });
 
   // ---------- Collapse/expand ----------
-  let collapsed = false;
+  // Default collapsed — panel starts as a compact header with connection dot.
+  // User clicks header to expand.
+  let collapsed = true;
+  els.body.style.display = 'none';
+  els.toggle.textContent = '+';
   els.header.addEventListener('click', () => {
     if (isDragging) return;
     collapsed = !collapsed;
     els.body.style.display = collapsed ? 'none' : 'block';
     els.toggle.textContent = collapsed ? '+' : '—';
+  });
+
+  // ---------- Clear form (broom icon) ----------
+  // Clears the eClaim3 estimate/insurance fields. Dispatches input+change so
+  // ASP.NET onchange / calc handlers that recompute totals see the update.
+  const CLEAR_FIELD_IDS = [
+    'txtNum_Investigate', 'txtNum_Transport', 'txtNum_Photo', 'txtOther_Desc',
+    'txtInvestigate_UnitPrice', 'txtTransport_UnitPrice', 'txtPhoto_UnitPrice',
+    'txtSur_Tel', 'txtSur_Insure', 'txtSur_Claim', 'txtSur_Percent_Claim',
+    'txtSur_Daily', 'txtOther_UnitPrice',
+    'txtInvest_Price', 'txtTransport_Price', 'txtPhoto_Price',
+    'txtSur_Tel_Price', 'txtSur_Insure_Price', 'txtSur_Claim_Price',
+    'txtSur_Daily_Price', 'txtOther_Price',
+    'txtIns_Invest', 'txtIns_Trans', 'txtIns_Photo', 'txtIns_Tel',
+    'txtIns_Insure', 'txtIns_Claim', 'txtIns_Daily', 'txtIns_Other',
+  ];
+  els.clearBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // don't collapse/expand the panel
+    let cleared = 0;
+    for (const id of CLEAR_FIELD_IDS) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (el.value !== '') {
+        el.value = '';
+        el.dispatchEvent(new Event('input',  { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      cleared++;
+    }
+    setStatus(`ล้างค่าแล้ว ${cleared}/${CLEAR_FIELD_IDS.length} ช่อง`, 'ok');
+    setTimeout(() => setStatus(''), 2000);
   });
 
   // ---------- Drag ----------
@@ -212,12 +273,6 @@
   // ---------- API (routed through background) ----------
   const checkDuplicates = (claim_no, survey_no) =>
     callApi({ op: 'check', claim_no, survey_no });
-
-  const saveRecord = (payload) =>
-    callApi({ op: 'save', payload }).then((b) => b.record);
-
-  const sendIsurvey = (id) =>
-    callApi({ op: 'send-isurvey', id });
 
   const pingHealth = () => callApi({ op: 'health' });
 
@@ -401,192 +456,95 @@
     `;
   }
 
-  // ---------- Save ----------
-  //   skipIsurvey=true (update path): save row to DB, leave isurvey_sent=0
-  //   ("รอส่ง") — no POST to /api/send-isurvey.
-  async function triggerSave({ skipIsurvey = false } = {}) {
-    if (state.saving || !state.canSend) return;
-    state.saving = true;
-    render();
-
-    const base = {
-      claim_no:  state.claimNo,
-      survey_no: state.surveyNo,
-      keyer:     state.keyer,
-      work_type: state.workType,
-    };
-
-    try {
-      if (state.workType === 'งานรวม') {
-        await saveBatch(base, getFilledMixValues(), resetMixList, { skipIsurvey });
-      } else if (state.workType === 'SESV') {
-        await saveBatch(base, getFilledSesvValues(), resetSesvList, { skipIsurvey });
-      } else {
-        await saveOne({ ...base, invoice_mix: '' }, { skipIsurvey });
-      }
-    } catch (err) {
-      setStatus(`ผิดพลาด: ${err.message}`, 'err');
-    } finally {
-      state.saving = false;
-      state.lastChecked = { claim: null, survey: null };
-      scheduleDupCheck(true);
-      render();
-    }
-  }
-
-  // --- Web-submit gate --------------------------------------------------
-  // 1) listen for clicks on the eClaim3 "ส่งงานใหม่" button
-  // 2) listen for SweetAlert success popup appearing
-  // 3) when user dismisses popup (clicks OK), auto-fire panel save
-  const WEB_CLICK_TTL_MS = 60_000;  // popup must appear within this window after click
-
-  // Two save entry points on eClaim3:
-  //   - #wuFlow1_cmdSendNew  → "ส่งงานใหม่" → SweetAlert success popup → save + iSurvey
-  //   - #btnSurvey_Update    → "บันทึกราคา" → native window.alert      → save only, รอส่ง
+  // --- Submit buttons --------------------------------------------------
+  // Capture-phase click handler fires the save via the background worker at
+  // click time, before eClaim3 postback navigates the page. We no longer wait
+  // for the native alert / SweetAlert to confirm — the button click itself is
+  // the signal (any iSurvey submit is idempotent via upsert_pending + server
+  // short-circuit on isurvey_sent=1).
+  //   - #wuFlow1_cmdSendNew  → "ส่งงานใหม่" → save + flush iSurvey for the claim
+  //   - #btnSurvey_Update    → "บันทึกราคา" → save only (upsert pending rows)
   document.addEventListener('click', (e) => {
     if (!e.target.closest) return;
     const newBtn    = e.target.closest('#wuFlow1_cmdSendNew');
     const updateBtn = e.target.closest('#btnSurvey_Update');
     if (!newBtn && !updateBtn) return;
-    state.webClickSource = newBtn ? 'new' : 'update';
-    state.webClickedAt = Date.now();
-    state.webConfirmedAt = null;
+
+    const src = newBtn ? 'new' : 'update';
+    if (state.claimNo && state.keyer) {
+      // Optimistically paint 🟠/🟢 in the submit status row.
+      state.lastSavedAt    = Date.now();
+      state.lastSavedSrc   = src;
+      state.lastSavedClaim = state.claimNo;
+      persistLastSaved(src, state.claimNo);
+
+      // Build the set of rows to save.
+      //   งานต้น/งานตาม (no batch) → single row from the page.
+      //   งานรวม / SESV (batch)    → one "primary" row from the page (using
+      //     state.baseType — งานต้น/งานตาม as determined by ddlAdd_No) plus
+      //     one "งานตาม" row per invoice/sesv input, with invoice_mix set to
+      //     the page's survey_no so the batch rows link back to the origin.
+      const payloads = [];
+      if (state.workType === 'งานรวม' || state.workType === 'SESV') {
+        payloads.push({
+          claim_no:    state.claimNo,
+          survey_no:   state.surveyNo,
+          keyer:       state.keyer,
+          work_type:   state.baseType,
+          invoice_mix: '',
+        });
+        const values = state.workType === 'งานรวม'
+          ? getFilledMixValues()
+          : getFilledSesvValues();
+        for (const v of values) {
+          payloads.push({
+            claim_no:    state.claimNo,
+            survey_no:   v,
+            keyer:       state.keyer,
+            work_type:   'งานตาม',
+            invoice_mix: state.surveyNo,
+          });
+        }
+      } else {
+        payloads.push({
+          claim_no:    state.claimNo,
+          survey_no:   state.surveyNo,
+          keyer:       state.keyer,
+          work_type:   state.workType,
+          invoice_mix: '',
+        });
+      }
+
+      // For "ส่งงานใหม่" we send *one* message with the whole payload set
+      // and let background.js save everything then flush iSurvey for every
+      // row of this claim that is still sent=0 — regardless of whether the
+      // user ever clicked "บันทึกราคา" first. Handled entirely in background
+      // so it survives content-script teardown when eClaim3 navigates to
+      // frmMainpage immediately after submit.
+      //
+      // For "บันทึกราคา" we just save each row without touching iSurvey.
+      if (src === 'new') {
+        try {
+          chrome.runtime.sendMessage({
+            kind: 'se-api', op: 'save-many-and-flush',
+            claim_no: state.claimNo,
+            payloads: payloads.map((p) => ({ ...p, upsert_pending: true })),
+          });
+        } catch (_) { /* ignore */ }
+      } else {
+        for (const payload of payloads) {
+          try {
+            chrome.runtime.sendMessage({
+              kind: 'se-api', op: 'save',
+              payload: { ...payload, upsert_pending: true },
+            });
+          } catch (_) { /* ignore */ }
+        }
+      }
+    }
+
     render();
   }, true);
-
-  // Watch for .swal-modal appearing with a success icon
-  const swalObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const n of m.addedNodes) {
-        if (!n || n.nodeType !== 1) continue;
-        const modal = n.matches?.('.swal-modal') ? n : n.querySelector?.('.swal-modal');
-        if (!modal) continue;
-        if (!modal.querySelector('.swal-icon--success')) continue;
-
-        // Ignore popups that aren't tied to our submit click
-        if (!state.webClickedAt
-            || Date.now() - state.webClickedAt > WEB_CLICK_TTL_MS) continue;
-
-        state.webConfirmedAt = Date.now();
-        render();
-
-        const okBtn = modal.querySelector('.swal-button--confirm');
-        if (okBtn) okBtn.addEventListener('click', onSuccessDismissed, { once: true });
-      }
-    }
-  });
-  swalObserver.observe(document.body, { childList: true, subtree: true });
-
-  // Native alert path: page-inject.js wraps window.alert and dispatches this
-  // event from the page world. 'dismissed' fires when the user clicks OK —
-  // equivalent to the swal OK-button click above, so we auto-fire the save.
-  const ALERT_SUCCESS_RE = /บันทึก.*เรียบร้อย/;
-  window.addEventListener('se-page-alert', (e) => {
-    const detail = e.detail || {};
-    if (!ALERT_SUCCESS_RE.test(detail.text || '')) return;
-    if (!state.webClickedAt
-        || Date.now() - state.webClickedAt > WEB_CLICK_TTL_MS) return;
-
-    if (detail.phase === 'shown') {
-      state.webConfirmedAt = Date.now();
-      render();
-    } else if (detail.phase === 'dismissed') {
-      onSuccessDismissed();
-    }
-  });
-
-  async function onSuccessDismissed() {
-    if (state.autoFiring) return;
-    if (!state.webConfirmedAt) return;
-    const skipIsurvey = state.webClickSource === 'update';
-    if (!state.canSend) {
-      setStatus('ข้อมูลใน panel ไม่ครบ — ไม่ได้ auto save', 'warn');
-      return;
-    }
-    state.autoFiring = true;
-    try {
-      await triggerSave({ skipIsurvey });
-    } finally {
-      state.autoFiring = false;
-      // Consume the web-submit gate — additional panel saves on the same claim
-      // require another web submit to avoid committing rows that weren't sent.
-      state.webClickedAt = null;
-      state.webConfirmedAt = null;
-      state.webClickSource = null;
-      render();
-    }
-  }
-
-  async function saveOne(payload, { skipIsurvey = false } = {}) {
-    setStatus('กำลังบันทึก...', 'busy');
-    // Update path: tell the server to update the existing pending row for
-    // this (claim, survey) instead of piling on a new one every edit.
-    const record = await saveRecord({ ...payload, upsert_pending: skipIsurvey });
-    if (skipIsurvey) {
-      setStatus(`บันทึกแก้ไข id=${record.id} ✓ (รอส่ง iSurvey)`, 'ok');
-      return;
-    }
-    setStatus(`บันทึกแล้ว (id=${record.id}) — กำลังส่ง iSurvey...`, 'busy');
-    const result = await sendIsurvey(record.id);
-    if (result.skipped) {
-      setStatus(`บันทึก id=${record.id} ✓ (${state.workType} ไม่ส่ง iSurvey)`, 'ok');
-    } else if (result.sent) {
-      setStatus(`ส่งสำเร็จ id=${record.id} ✓`, 'ok');
-    } else {
-      setStatus(`บันทึก id=${record.id} แต่สถานะ iSurvey ไม่ชัด`, 'warn');
-    }
-  }
-
-  // batch: เดินวนทีละ invoice, ข้ามช่องว่าง, ไม่หยุดเมื่อ iSurvey fail —
-  // record ที่ iSurvey fail จะมี isurvey_sent=0 ให้ retry ได้ทีหลัง
-  //
-  // DB column mapping for งานรวม/SESV:
-  //   survey_no   = value user typed (ส่งไป iSurvey)
-  //   invoice_mix = เลขเซอร์เวย์จาก DOM (เก็บเป็น reference)
-  async function saveBatch(base, values, resetFn, { skipIsurvey = false } = {}) {
-    const total = values.length;
-    const results = { ok: 0, failed: [] };
-    for (let i = 0; i < total; i++) {
-      const typed = values[i];
-      const payload = {
-        claim_no:    base.claim_no,
-        survey_no:   typed,
-        keyer:       base.keyer,
-        work_type:   base.work_type,
-        invoice_mix: base.survey_no,
-        // Same upsert semantics as saveOne for the update path.
-        upsert_pending: skipIsurvey,
-      };
-      setStatus(`กำลังบันทึก ${i + 1}/${total} — ${typed} ...`, 'busy');
-      let record;
-      try {
-        record = await saveRecord(payload);
-      } catch (err) {
-        results.failed.push({ index: i + 1, typed, where: 'save', reason: err.message });
-        continue;
-      }
-      if (skipIsurvey) { results.ok++; continue; }
-      try {
-        const r = await sendIsurvey(record.id);
-        if (r.sent || r.skipped) results.ok++;
-        else results.failed.push({ index: i + 1, typed, where: 'isurvey', reason: 'ไม่แน่ใจสถานะ' });
-      } catch (err) {
-        results.failed.push({ index: i + 1, typed, where: 'isurvey', reason: err.message });
-      }
-    }
-
-    if (results.failed.length === 0) {
-      const suffix = skipIsurvey ? ' (รอส่ง iSurvey)' : '';
-      setStatus(`สำเร็จทั้งหมด ${results.ok}/${total} ✓${suffix}`, 'ok');
-      if (resetFn) resetFn();
-    } else {
-      const failList = results.failed.map((f) => `${f.typed}(${f.where})`).join(', ');
-      setStatus(`สำเร็จ ${results.ok}/${total}, พัง ${results.failed.length}: ${failList}`, 'err');
-      // keep failed rows in the list? we already saved to DB for the iSurvey-failed
-      // ones (isurvey_sent=0), so the user can retry from the server side later.
-      // For simplicity clear the list; retries will be handled via server logs.
-    }
-  }
 
   function setStatus(text, kind) {
     els.status.textContent = text || '';
@@ -594,15 +552,10 @@
     els.status.hidden = !text;
   }
 
-  // Connection indicator dot in the header.
-  //   kind: 'ok' (green) | 'err' (red) | null (gray)
-  function setConn(kind, tooltip) {
-    els.connDot.className = 'se-conn-dot' + (kind ? ` se-conn-${kind}` : '');
-    els.connDot.title = tooltip
-      || (kind === 'ok'  ? 'เชื่อม server ได้'
-        : kind === 'err' ? 'เชื่อม server ไม่ได้'
-        : 'ยังไม่ทราบสถานะ');
-  }
+  // Connection indicator was removed from the panel header in v0.3.26 —
+  // server status now lives in the popup only. Keep a no-op so existing
+  // call sites don't need to change.
+  function setConn(_kind, _tooltip) { /* no-op */ }
 
   // ---------- Render ----------
   function render() {
@@ -610,10 +563,10 @@
     if (state.claimNo) {
       els.claim.textContent = state.claimNo;
       if (state.claimDup && state.claimSent) {
-        els.claimLabel.textContent = 'มีเลขเคลมนี้แล้ว (ส่งแล้ว)';
+        els.claimLabel.textContent = 'เลขเคลม (ส่งแล้ว)';
         els.claim.className = 'se-value se-dup';
       } else if (state.claimDup) {
-        els.claimLabel.textContent = 'มีเลขเคลมนี้แล้ว (รอส่ง)';
+        els.claimLabel.textContent = 'เลขเคลม (รอส่ง)';
         els.claim.className = 'se-value se-pending';
       } else {
         els.claimLabel.textContent = 'เลขเคลม';
@@ -629,10 +582,10 @@
     if (state.surveyNo) {
       els.survey.textContent = state.surveyNo;
       if (state.surveyDup && state.surveySent) {
-        els.surveyLabel.textContent = 'เลขเซอร์เวย์ซ้ำ (ส่งแล้ว) — เลือก SESV/งานรวม';
+        els.surveyLabel.textContent = 'เลขเซอร์เวย์ (ส่งแล้ว)';
         els.survey.className = 'se-value se-dup';
       } else if (state.surveyDup) {
-        els.surveyLabel.textContent = 'เลขเซอร์เวย์ซ้ำ (รอส่ง)';
+        els.surveyLabel.textContent = 'เลขเซอร์เวย์ (รอส่ง)';
         els.survey.className = 'se-value se-pending';
       } else {
         els.surveyLabel.textContent = 'เลขเซอร์เวย์';
@@ -644,57 +597,51 @@
       els.surveyLabel.textContent = 'เลขเซอร์เวย์';
     }
 
-    // Keyer
+    // Keyer — inline next to the "ผู้คีย์:" label.
     if (state.keyer) {
       els.keyer.textContent = state.keyer;
-      els.keyer.className = 'se-value se-found se-keyer';
+      els.keyer.className = 'se-keyer-name';
     } else {
       els.keyer.textContent = 'ไม่พบข้อมูลผู้ใช้';
-      els.keyer.className = 'se-value se-empty se-keyer';
+      els.keyer.className = 'se-keyer-name se-empty';
     }
 
     // Work-type rows
     els.mixRow.hidden  = state.workType !== 'งานรวม';
     els.sesvRow.hidden = state.workType !== 'SESV';
 
-    // Can we send?
-    const hasCore  = state.claimNo && state.surveyNo && state.keyer;
-    const noDup    = !state.claimDup && !state.surveyDup;
-    const mixOk    = state.workType !== 'งานรวม' || getFilledMixValues().length > 0;
-    const sesvOk   = state.workType !== 'SESV'    || getFilledSesvValues().length > 0;
-    // For งานรวม/SESV the user explicitly overrides dup — we only require
-    // dup-free for งานต้น/งานตาม (the tk.py rule).
-    // Update path (#btnSurvey_Update) also bypasses dup: the original row is
-    // already in DB by definition, so claim/survey will always look duplicate.
-    const isUpdate = state.webClickSource === 'update';
-    const dupOk    = isUpdate || state.workType === 'งานรวม' || state.workType === 'SESV' || noDup;
-    state.canSend  = !state.saving && hasCore && mixOk && sesvOk && dupOk;
-
     renderSubmitStatus();
   }
 
-  // Submit-gate status area (replaces the manual save button).
+  // Submit-gate status — reflects the most recent click on eClaim3's submit
+  // buttons (🟠 "บันทึกราคา" → รอส่งงาน, 🟢 "ส่งงานใหม่" → ส่งงานแล้ว).
+  // 🔴 until the first click; lastSavedAt expires after LAST_SAVED_TTL_MS.
   function renderSubmitStatus() {
     const el = els.submitStatus;
-    const isUpdate = state.webClickSource === 'update';
-    const verb = isUpdate ? 'บันทึกแก้ไข' : 'ส่งงาน';
     let icon, text, cls;
 
-    if (state.saving || state.autoFiring) {
-      icon = '⏳'; text = 'กำลังบันทึก...'; cls = 'se-submit-busy';
-    } else if (state.webConfirmedAt) {
-      icon = '🟢';
-      text = `${verb}บนเว็บสำเร็จ — กด OK บน popup เพื่อ auto save`;
-      cls = 'se-submit-confirmed';
-    } else if (state.webClickedAt) {
-      icon = '🟡'; text = 'รอ popup ยืนยันจาก server...'; cls = 'se-submit-pending';
+    const lastSavedFresh = state.lastSavedClaim
+      && state.lastSavedClaim === state.claimNo
+      && state.lastSavedAt
+      && (Date.now() - state.lastSavedAt) < LAST_SAVED_TTL_MS;
+
+    if (lastSavedFresh) {
+      if (state.lastSavedSrc === 'update') {
+        icon = '🟠'; text = 'รอส่งงาน'; cls = 'se-submit-saved-pending';
+      } else {
+        icon = '🟢'; text = 'ส่งงานแล้ว'; cls = 'se-submit-confirmed';
+      }
     } else {
-      icon = '🔴'; text = 'ยังไม่ได้ส่งงานบนเว็บ'; cls = 'se-submit-idle';
+      icon = '🔴'; text = 'ยังไม่ได้ส่ง'; cls = 'se-submit-idle';
     }
 
     els.submitIcon.textContent = icon;
     els.submitText.textContent = text;
     el.className = `se-submit-status ${cls}`;
+    if (els.submitDot) {
+      els.submitDot.className = `se-submit-dot ${cls}`;
+      els.submitDot.title = `สถานะส่งงาน: ${text}`;
+    }
   }
 
   // ---------- DOM watching ----------
@@ -740,10 +687,14 @@
       resetMixList();
       resetSesvList();
       setBaseType(baseTypeFromAddNo(v.addNo));
-      // Reset web-submit gate: new claim requires a fresh web submit
-      state.webClickedAt = null;
-      state.webConfirmedAt = null;
-      state.webClickSource = null;
+      // Drop the "บันทึกแล้ว รอส่งงาน" feedback when the user moves to a
+      // different claim — it only applies to the one we just saved.
+      if (state.lastSavedClaim && state.lastSavedClaim !== v.claimNo) {
+        state.lastSavedAt    = null;
+        state.lastSavedSrc   = null;
+        state.lastSavedClaim = null;
+        try { sessionStorage.removeItem(SE_LAST_SAVED_KEY); } catch (_) { /* ignore */ }
+      }
     } else if (addNoChanged && !state.batchMode) {
       setBaseType(baseTypeFromAddNo(v.addNo));
     }

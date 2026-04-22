@@ -1,10 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import ExcelJS from 'exceljs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { db, initSchema } from './db.js';
 import { sendRecordToIsurvey } from './send-isurvey.js';
 import { startRetryLoop } from './retry.js';
 import { log } from './logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 initSchema();
 
@@ -30,6 +34,12 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+// Static admin UI — /admin, /admin/… → server/public/*.
+// Mounted *before* the API-key gate so the HTML/JS/CSS can load without a key;
+// the page itself prompts the user for the key on first load and includes it
+// in the X-API-Key header on every API call.
+app.use('/admin', express.static(path.join(__dirname, '..', 'public')));
 
 // API-key auth — shared header X-API-Key. Off if SE_KEY_API_KEY is empty
 // (backwards-compat: existing deployments keep working until the key is set).
@@ -212,6 +222,15 @@ const insertStmt = db.prepare(`
   VALUES (@claim_no, @survey_no, @keyer, @work_type, @invoice_mix, 0)
 `);
 
+// Used by upsert_pending: if (claim, survey) was already flushed, the POST
+// short-circuits with this row so repeat clicks of "บันทึกราคา" / "ส่งงานใหม่"
+// don't create duplicate pending rows that would re-send to iSurvey.
+const selectLatestSentStmt = db.prepare(`
+  SELECT * FROM records
+  WHERE claim_no = ? AND survey_no = ? AND isurvey_sent = 1
+  ORDER BY id DESC LIMIT 1
+`);
+
 // Used by upsert_pending: grab the latest pending row for this (claim, survey).
 const selectLatestPendingStmt = db.prepare(`
   SELECT id FROM records
@@ -252,11 +271,22 @@ app.post('/api/records', (req, res) => {
     invoice_mix: String(invoice_mix).trim(),
   };
 
-  // upsert_pending = true (update path from #btnSurvey_Update): if there's
-  // already a pending row for this (claim, survey), UPDATE it in place so the
-  // same "edit" doesn't accumulate duplicate pending rows. Retry fields are
-  // reset so the loop picks it up again.
+  // upsert_pending = true (extension buttons: บันทึกราคา / ส่งงานใหม่):
+  //   1. If (claim, survey) already has isurvey_sent=1 → short-circuit. Extension
+  //      shouldn't be able to re-save or re-send already-flushed work — returning
+  //      the existing sent row with upserted='skipped_already_sent' tells callers
+  //      the intent was acknowledged but intentionally dropped.
+  //   2. Else if pending row exists → UPDATE in place (keyer/work_type/invoice_mix
+  //      reflect the latest click; retry fields reset so the loop re-picks it).
+  //   3. Else → fall through to INSERT (fresh row).
   if (upsert_pending) {
+    const sent = selectLatestSentStmt.get(clean.claim_no, clean.survey_no);
+    if (sent) {
+      log.info('upsert.skip_already_sent', {
+        id: sent.id, claim_no: sent.claim_no, survey_no: sent.survey_no,
+      });
+      return res.status(200).json({ record: sent, upserted: 'skipped_already_sent' });
+    }
     const existing = selectLatestPendingStmt.get(clean.claim_no, clean.survey_no);
     if (existing) {
       updatePendingStmt.run({ ...clean, id: existing.id });
@@ -268,6 +298,47 @@ app.post('/api/records', (req, res) => {
   const result = insertStmt.run(clean);
   const row = db.prepare('SELECT * FROM records WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ record: row, upserted: 'inserted' });
+});
+
+// Fetch a single record by id. Used by the admin UI's edit form.
+app.get('/api/records/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid id' });
+  const row = db.prepare('SELECT * FROM records WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'record not found' });
+  res.json({ record: row });
+});
+
+// Update a single record. Accepts any subset of editable fields. Read-only
+// fields (id, created_at, retry_*) are never touched here.
+const EDITABLE_FIELDS = ['claim_no', 'survey_no', 'keyer', 'work_type', 'invoice_mix', 'isurvey_sent'];
+app.patch('/api/records/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid id' });
+  const existing = db.prepare('SELECT id FROM records WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'record not found' });
+
+  const sets = [];
+  const params = { id };
+  for (const f of EDITABLE_FIELDS) {
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, f)) {
+      sets.push(`${f} = @${f}`);
+      params[f] = f === 'isurvey_sent' ? (req.body[f] ? 1 : 0) : String(req.body[f] ?? '').trim();
+    }
+  }
+  if (!sets.length) return res.status(400).json({ error: 'no editable fields provided' });
+
+  db.prepare(`UPDATE records SET ${sets.join(', ')} WHERE id = @id`).run(params);
+  const row = db.prepare('SELECT * FROM records WHERE id = ?').get(id);
+  res.json({ record: row });
+});
+
+app.delete('/api/records/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid id' });
+  const info = db.prepare('DELETE FROM records WHERE id = ?').run(id);
+  if (info.changes === 0) return res.status(404).json({ error: 'record not found' });
+  res.json({ deleted: id });
 });
 
 app.post('/api/send-isurvey', async (req, res) => {

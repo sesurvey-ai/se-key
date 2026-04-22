@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SE Survey — Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header class="hdr">
+    <h1>SE Survey — Admin</h1>
+    <div class="hdr-right">
+      <span id="conn-dot" class="conn-dot" title="สถานะ server"></span>
+      <span id="rows-total" class="rows-total">—</span>
+      <button id="btn-settings" class="btn btn-icon" type="button" title="ตั้งค่า API key">⚙</button>
+    </div>
+  </header>
+
+  <section class="controls">
+    <input type="search" id="q" class="q" placeholder="ค้นหา เลขเคลม / เซอร์เวย์ / ผู้คีย์ / invoice...">
+    <select id="work-type" class="sel">
+      <option value="">— ทุกประเภทงาน —</option>
+      <option value="งานต้น">งานต้น</option>
+      <option value="งานตาม">งานตาม</option>
+      <option value="งานรวม">งานรวม</option>
+      <option value="SESV">SESV</option>
+    </select>
+    <select id="status" class="sel">
+      <option value="">— ทุกสถานะ —</option>
+      <option value="0">รอส่ง</option>
+      <option value="1">ส่งแล้ว</option>
+    </select>
+    <select id="page-size" class="sel">
+      <option value="50">50 / หน้า</option>
+      <option value="100" selected>100 / หน้า</option>
+      <option value="250">250 / หน้า</option>
+    </select>
+    <button id="btn-refresh" class="btn" type="button">รีเฟรช</button>
+    <button id="btn-add" class="btn btn-primary" type="button">+ เพิ่ม</button>
+  </section>
+
+  <section class="summary"><span id="summary-text">กำลังโหลด...</span></section>
+
+  <section class="table-wrap">
+    <table id="records-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>เวลา</th>
+          <th>เลขเคลม</th>
+          <th>เลขเซอร์เวย์</th>
+          <th>ผู้คีย์</th>
+          <th>ประเภทงาน</th>
+          <th>invoice_mix</th>
+          <th>สถานะ</th>
+          <th>จัดการ</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+
+  <footer class="pager">
+    <button id="prev" class="btn" type="button">← ก่อนหน้า</button>
+    <span id="page-info" class="page-info">หน้า 1</span>
+    <button id="next" class="btn" type="button">ถัดไป →</button>
+  </footer>
+
+  <!-- Add/Edit modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="modal-title">เพิ่ม record</h2>
+      <form id="record-form">
+        <input type="hidden" id="f-id">
+        <label>เลขเคลม <span class="req">*</span>
+          <input type="text" id="f-claim" required>
+        </label>
+        <label>เลขเซอร์เวย์
+          <input type="text" id="f-survey">
+        </label>
+        <label>ผู้คีย์
+          <input type="text" id="f-keyer">
+        </label>
+
+        <!-- Add mode: baseType radio + batch checkboxes + dynamic lists (mirrors panel) -->
+        <div id="batch-section" hidden>
+          <div class="form-label">ประเภทงาน</div>
+          <div class="radio-row">
+            <label class="radio-inline"><input type="radio" name="f-basetype" value="งานต้น" checked> งานต้น</label>
+            <label class="radio-inline"><input type="radio" name="f-basetype" value="งานตาม"> งานตาม</label>
+          </div>
+
+          <div class="form-label" style="margin-top:10px">Batch (เพิ่มหลายแถวในคลิกเดียว)</div>
+          <div class="check-row">
+            <label class="check-inline"><input type="checkbox" id="f-check-mix"> งานรวม</label>
+            <label class="check-inline"><input type="checkbox" id="f-check-sesv"> SESV</label>
+          </div>
+
+          <div id="f-mix-row" class="batch-list" hidden>
+            <div class="form-label">เลข invoice (งานรวม)</div>
+            <div id="f-mix-list"></div>
+            <button type="button" id="f-mix-add" class="batch-add">+ เพิ่มอีกเลข</button>
+          </div>
+
+          <div id="f-sesv-row" class="batch-list" hidden>
+            <div class="form-label">เลขเซอร์เวย์ (SESV)</div>
+            <div id="f-sesv-list"></div>
+            <button type="button" id="f-sesv-add" class="batch-add">+ เพิ่มอีกเลข</button>
+          </div>
+        </div>
+
+        <!-- Edit mode: direct work_type dropdown + invoice_mix -->
+        <div id="edit-section" hidden>
+          <label>ประเภทงาน
+            <select id="f-worktype">
+              <option value="">—</option>
+              <option value="งานต้น">งานต้น</option>
+              <option value="งานตาม">งานตาม</option>
+              <option value="งานรวม">งานรวม</option>
+              <option value="SESV">SESV</option>
+            </select>
+          </label>
+          <label>invoice_mix
+            <input type="text" id="f-invoice">
+          </label>
+        </div>
+
+        <label>สถานะ iSurvey
+          <select id="f-sent">
+            <option value="0">รอส่ง</option>
+            <option value="1">ส่งแล้ว</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button type="button" id="btn-cancel" class="btn btn-secondary">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึก</button>
+        </div>
+        <div id="form-err" class="form-err hidden"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete confirm modal -->
+  <div id="del-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>ยืนยันการลบ</h2>
+      <p>ต้องการลบ record <span id="del-info"></span> หรือไม่? — การลบ ย้อนกลับไม่ได้</p>
+      <div class="form-actions">
+        <button type="button" id="btn-del-cancel" class="btn btn-secondary">ยกเลิก</button>
+        <button type="button" id="btn-del-confirm" class="btn btn-danger">ลบ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- API key settings modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>ตั้งค่า</h2>
+      <label>API key
+        <input type="text" id="f-apikey" placeholder="shared secret ตรงกับ SE_KEY_API_KEY ของ server">
+      </label>
+      <div class="form-actions">
+        <button type="button" id="btn-settings-cancel" class="btn btn-secondary">ยกเลิก</button>
+        <button type="button" id="btn-settings-save" class="btn btn-primary">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

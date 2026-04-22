@@ -52,6 +52,69 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify(msg.payload),
         });
+      } else if (msg.op === 'save-many-and-flush') {
+        // "ส่งงานใหม่" flow. Save all caller-supplied payloads (upsert any
+        // pending rows), then send iSurvey for *every* row of this claim that
+        // is still sent=0 — regardless of whether the user ever clicked
+        // "บันทึกราคา" first, or whether an earlier tab's sessionStorage is
+        // gone. sendRecordToIsurvey is idempotent (alreadySent short-circuit)
+        // so a second click is a safe no-op.
+        const saved = [];
+        for (const p of (msg.payloads || [])) {
+          const r = await apiFetch('/api/records', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(p),
+          });
+          if (r.ok && r.body && r.body.record) saved.push(r.body.record.id);
+        }
+        const claim_no = msg.claim_no || '';
+        const sent = [], failed = [];
+        if (claim_no) {
+          const qs = new URLSearchParams({
+            claim_no, isurvey_sent: '0', limit: '1000',
+          });
+          const listRes = await apiFetch(`/api/records?${qs}`);
+          const rows = (listRes.ok && listRes.body && Array.isArray(listRes.body.rows))
+            ? listRes.body.rows : [];
+          for (const row of rows) {
+            const s = await apiFetch('/api/send-isurvey', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ id: row.id }),
+            });
+            if (s.ok && s.body && (s.body.sent || s.body.skipped)) {
+              sent.push({ id: row.id });
+            } else {
+              failed.push({ id: row.id, status: s.status, error: s.body && s.body.error });
+            }
+          }
+        }
+        result = { ok: true, body: { saved, sent, failed } };
+      } else if (msg.op === 'save-and-send') {
+        // Combined save + send-isurvey used by the content-script click
+        // handler for the new-path (ส่งงานใหม่). Running both here lets the
+        // send-isurvey step survive content-script teardown when eClaim3
+        // navigates to frmMainpage immediately after submit.
+        const saveRes = await apiFetch('/api/records', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(msg.payload),
+        });
+        if (!saveRes.ok || !saveRes.body || !saveRes.body.record) {
+          result = saveRes;
+        } else {
+          const sendRes = await apiFetch('/api/send-isurvey', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ id: saveRes.body.record.id }),
+          });
+          result = {
+            ok:     saveRes.ok && sendRes.ok,
+            status: sendRes.status,
+            body:   { save: saveRes.body, send: sendRes.body },
+          };
+        }
       } else if (msg.op === 'send-isurvey') {
         result = await apiFetch('/api/send-isurvey', {
           method:  'POST',

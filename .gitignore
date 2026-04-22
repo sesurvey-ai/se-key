@@ -22,6 +22,11 @@ server/logs/
 # OS
 .DS_Store
 Thumbs.db
+# macOS metadata (._filename) that sneaks in via SMB mounts
+._*
+
+# Stray scratch files that may hold credentials — never commit
+New*.txt
 
 # Editor
 .vscode/
