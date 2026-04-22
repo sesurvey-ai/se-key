@@ -189,13 +189,15 @@
   // Default collapsed — panel starts as a compact header with connection dot.
   // User clicks header to expand.
   let collapsed = true;
-  els.body.style.display = 'none';
-  els.toggle.textContent = '+';
+  function setCollapsed(c) {
+    collapsed = c;
+    els.body.style.display = c ? 'none' : 'block';
+    els.toggle.textContent = c ? '+' : '—';
+  }
+  setCollapsed(true);
   els.header.addEventListener('click', () => {
     if (isDragging) return;
-    collapsed = !collapsed;
-    els.body.style.display = collapsed ? 'none' : 'block';
-    els.toggle.textContent = collapsed ? '+' : '—';
+    setCollapsed(!collapsed);
   });
 
   // ---------- Clear form (broom icon) ----------
@@ -351,6 +353,9 @@
     els.sesvCheck.checked = mode === 'SESV';
     for (const r of els.radios) r.disabled = Boolean(mode);
     recomputeWorkType();
+    // Entering batch mode means the user needs to see + fill the invoice list
+    // — expand the panel automatically.
+    if (mode) setCollapsed(false);
   }
 
   els.radios.forEach((r) => r.addEventListener('change', () => {
@@ -456,6 +461,29 @@
     `;
   }
 
+  // In batch mode (งานรวม / SESV) every visible input row must be filled.
+  // User can either type a value in each row or click × to remove the row —
+  // empty rows are never accepted. Returns { ok, error, focus } where focus
+  // is the first empty input so we can highlight it.
+  function validateBatchInputs() {
+    if (state.batchMode === 'งานรวม') {
+      const inputs = [...els.mixList.querySelectorAll('.se-mix-input')];
+      for (const inp of inputs) {
+        if (!inp.value.trim()) {
+          return { ok: false, error: 'กรอกเลข invoice ให้ครบทุกช่อง หรือลบช่องว่างออก (×)', focus: inp };
+        }
+      }
+    } else if (state.batchMode === 'SESV') {
+      const inputs = [...els.sesvList.querySelectorAll('.se-sesv-input')];
+      for (const inp of inputs) {
+        if (!inp.value.trim()) {
+          return { ok: false, error: 'กรอกเลขเซอร์เวย์ให้ครบทุกช่อง หรือลบช่องว่างออก (×)', focus: inp };
+        }
+      }
+    }
+    return { ok: true };
+  }
+
   // --- Submit buttons --------------------------------------------------
   // Capture-phase click handler fires the save via the background worker at
   // click time, before eClaim3 postback navigates the page. We no longer wait
@@ -471,6 +499,22 @@
     if (!newBtn && !updateBtn) return;
 
     const src = newBtn ? 'new' : 'update';
+
+    // Batch-mode gate — block the click if any invoice row is empty. Both
+    // eClaim3's own handler and our save fire are stopped so the user has
+    // to fix the input first.
+    if (state.batchMode) {
+      const v = validateBatchInputs();
+      if (!v.ok) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setCollapsed(false);
+        setStatus(v.error, 'err');
+        if (v.focus) v.focus.focus();
+        return;
+      }
+    }
+
     if (state.claimNo && state.keyer) {
       // Optimistically paint 🟠/🟢 in the submit status row.
       state.lastSavedAt    = Date.now();
