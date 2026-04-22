@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "eClaim3 Survey Helper",
-  "version": "0.3.30",
+  "version": "0.3.31",
   "description": "คีย์ข้อมูลงานสำรวจจากหน้า eClaim3 ส่งเข้า LAN API server",
   "permissions": ["storage"],
   "host_permissions": [

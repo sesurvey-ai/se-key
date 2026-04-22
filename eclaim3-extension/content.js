@@ -668,8 +668,10 @@
         && v.keyer === lastRead.keyer
         && v.addNo === lastRead.addNo) return;
 
-    const claimChanged = v.claimNo && v.claimNo !== state.lastAutoClaim;
-    const addNoChanged = v.addNo !== lastRead.addNo;
+    const claimChanged  = v.claimNo && v.claimNo !== state.lastAutoClaim;
+    const addNoChanged  = v.addNo !== lastRead.addNo;
+    const surveyChanged = v.surveyNo !== lastRead.surveyNo;
+    const isSesvSurvey  = v.surveyNo && v.surveyNo.startsWith('SESV');
 
     lastRead = v;
     state.claimNo  = v.claimNo;
@@ -677,13 +679,15 @@
     state.keyer    = v.keyer;
     state.addNo    = v.addNo;
 
-    // Auto-pick base type from ddlAdd_No.
-    //   - On new claim: always re-apply and clear batch mode.
-    //   - On same claim but addNo changed: update base type only if not in batch mode
-    //     (don't yank radio selection out from under a disabled state).
+    // Auto-pick base type from ddlAdd_No + batch mode from survey prefix.
+    //   - On new claim: always re-apply. Batch mode auto-ticks SESV when
+    //     survey_no starts with "SESV" (eClaim3 SESV sub-form), otherwise off.
+    //   - On same claim but survey changed to a SESV-prefixed one: auto-tick SESV.
+    //   - On same claim, addNo changed: update base type only if not in batch
+    //     mode (don't yank radio selection out from under a disabled state).
     if (claimChanged) {
       state.lastAutoClaim = v.claimNo;
-      setBatchMode(null);
+      setBatchMode(isSesvSurvey ? 'SESV' : null);
       resetMixList();
       resetSesvList();
       setBaseType(baseTypeFromAddNo(v.addNo));
@@ -695,6 +699,9 @@
         state.lastSavedClaim = null;
         try { sessionStorage.removeItem(SE_LAST_SAVED_KEY); } catch (_) { /* ignore */ }
       }
+    } else if (surveyChanged && isSesvSurvey && state.batchMode !== 'SESV') {
+      // Same claim, user navigated to a SESV sub-form — flip to SESV mode.
+      setBatchMode('SESV');
     } else if (addNoChanged && !state.batchMode) {
       setBaseType(baseTypeFromAddNo(v.addNo));
     }
