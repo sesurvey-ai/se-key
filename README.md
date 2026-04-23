@@ -219,7 +219,7 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
   - [x] Import CSV จาก Google Sheets: 319,302 แถว → 1.7 วินาที
   - [x] Import xlsx `คีย์ข้อมูล.xlsx` เพิ่มเติม (+89 rows, `isurvey_sent=1`)
   - [x] Import xlsx `งานสร้างใหม่.xlsx` (+83 rows `isurvey_sent=0` + flip 1 row)
-- [x] **Chrome Extension v0.3.30** ([`eclaim3-extension/`](eclaim3-extension/))
+- [x] **Chrome Extension v0.3.33** ([`eclaim3-extension/`](eclaim3-extension/))
   - [x] Manifest V3 + host permissions + storage
   - [x] Floating panel — **แคบ 170px, ย่อเป็น default** (คลิก header ขยาย) ลากย้ายตำแหน่งได้
   - [x] Radio buttons: งานต้น / งานตาม / งานรวม / SESV + batch list
@@ -230,6 +230,8 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
   - [x] **Click-only detection**: save ยิงทันทีที่คลิกปุ่ม eClaim3 (capture phase) — ไม่พึ่ง native alert / SweetAlert observer อีกต่อไป (ลดขนาด content.js -293 บรรทัดใน v0.3.30)
   - [x] **"ส่งงานใหม่" flush-all-for-claim**: ยิง iSurvey ทุก row ของเคลมที่ยัง `sent=0` ไม่ว่าจะสร้างจาก session ไหน เครื่องไหน (v0.3.29)
   - [x] Batch flow งานรวม/SESV: 1 primary + N follow-up ในคลิกเดียว
+  - [x] **Auto-tick SESV** เมื่อ `#txtBill_No` ขึ้นต้น "SESV" + panel auto-expand + บังคับกรอก invoice ทุกช่อง (block click ถ้าว่าง) (v0.3.31 / v0.3.32)
+  - [x] **ตรวจจับปุ่ม "ส่งผลงานต่อเนื่อง"** (`#wuFlow1_cmdSendFollow`) — behavior เหมือน "ส่งงานใหม่" (v0.3.33)
   - [x] Submit status: 🔴 "ยังไม่ได้ส่ง" / 🟠 "รอส่งงาน" / 🟢 "ส่งงานแล้ว"
   - [x] **Submit status dot** บน header panel — เห็นสีสถานะได้แม้ panel ย่อ
   - [x] **🧹 Clear form** — ปุ่ม broom บน header ล้าง 29 ช่องฟอร์ม eClaim3 (ราคา/ประกัน/จำนวน/รายละเอียด) ในคลิกเดียว
