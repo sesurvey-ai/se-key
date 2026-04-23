@@ -18,9 +18,8 @@ Chrome Extension (Manifest V3) ฝังเข้าหน้า eClaim3 — อ
 ```
 eclaim3-extension/
 ├── manifest.json      ← Manifest V3 config
-├── page-inject.js     ← MAIN-world: hook window.alert + MutationObserver จับ .swal-modal
 ├── background.js      ← Service worker: fetch proxy + save-many-and-flush
-├── content.js         ← อ่าน DOM + floating panel + save flow + claim session + clear form
+├── content.js         ← อ่าน DOM + floating panel + click handler + validation
 ├── content.css        ← สไตล์ panel (แคบ 170px, ย่อ default, submit-status dot)
 ├── popup.html / popup.js  ← หน้าตั้งค่า (LAN URL + API key + วงสถานะ server + ปุ่ม 📋 ดูรายงาน)
 ├── records.html + .js + .css ← หน้ารายงานในตัว extension
@@ -28,10 +27,9 @@ eclaim3-extension/
 └── README.md
 ```
 
-## ทำไมต้องมี background.js + page-inject.js
+## ทำไมต้องมี background.js
 
-- **background.js**: eClaim3 เป็น HTTPS แต่ LAN server เป็น HTTP → Chrome block mixed content. Content script ส่ง `chrome.runtime.sendMessage` ไป background worker ซึ่งยิง fetch เอง (ไม่โดน mixed-content) + ประกัน reliability: การ save + send-isurvey ทำครบใน background แม้ content script ถูกทำลายจาก page navigation
-- **page-inject.js** (MAIN-world, document_start): hook `window.alert` + สังเกต `.swal-modal` ตั้งแต่ระดับหน้า เพราะ content script ที่ document_idle โหลดทีหลัง จับไม่ทัน
+eClaim3 เป็น HTTPS แต่ LAN server เป็น HTTP → Chrome block mixed content. Content script ส่ง `chrome.runtime.sendMessage` ไป background worker ซึ่งยิง fetch เอง (ไม่โดน mixed-content) + ประกัน reliability: การ save + send-isurvey ทำครบใน background แม้ content script ถูกทำลายจาก ASP.NET postback navigation
 
 ## Save flow
 
@@ -42,16 +40,15 @@ eclaim3-extension/
 
 ### กด "ส่งงานใหม่" (`#wuFlow1_cmdSendNew`)
 - Save row(s) ของหน้าปัจจุบัน
-- Background ยิง iSurvey สำหรับ **ทุก `(claim, survey)` ที่อยู่ใน claim session** → flip เป็น `isurvey_sent=1`
+- Background ยิง iSurvey สำหรับ **ทุก row ของเคลมนี้ที่ยัง `sent=0`** → flip เป็น `isurvey_sent=1`
+- ไม่ต้องกด "บันทึกราคา" มาก่อนก็ได้ — flow ครบในคลิกเดียว
+- Idempotent: server short-circuit `skipped_already_sent` ถ้า `(claim, survey)` ตรงกับ row ที่ `sent=1` แล้ว — กัน duplicate + กันยิงซ้ำจากเครื่องที่ 2
 - Panel แสดงสถานะ 🟢 "ส่งงานแล้ว" (พื้นเขียว)
 
-### Claim session (sessionStorage `se-claim-session`)
-- เริ่มใหม่เมื่อเปิดเคลมอื่น
-- สะสม survey_no จากการคลิก "บันทึกราคา" + "ส่งงานใหม่"
-- "ส่งงานใหม่" ส่ง iSurvey เฉพาะ survey ในลิสต์นี้ — ไม่ยุ่งกับ row ค้างเก่าของเคลมเดียวกัน
-
 ### Batch (งานรวม / SESV)
-- เปิด checkbox → ช่อง input list (เพิ่มได้หลาย invoice ด้วยปุ่ม +)
+- เปิด checkbox → panel auto-expand + ช่อง input list (เพิ่มได้หลาย invoice ด้วยปุ่ม +)
+- `#txtBill_No` ขึ้นต้น "SESV" → auto-tick SESV ให้อัตโนมัติ
+- **ทุกช่อง input ที่เห็นต้องมีค่า** ก่อนกดบันทึก/ส่ง — ถ้ามีช่องว่าง click จะถูก block (`preventDefault` + `stopImmediatePropagation`) + focus ช่องว่าง + แจ้งใน panel. ถ้าไม่ต้องการใช้ช่องไหน → กดปุ่ม × ลบ row นั้น
 - กดบันทึกครั้งเดียวได้ N+1 row:
   - 1 primary: claim + page's survey, work_type = baseType (งานต้น/งานตาม)
   - N follow-up: claim + invoice_value, work_type = "งานตาม", invoice_mix = page's survey
@@ -74,10 +71,8 @@ eclaim3-extension/
 | วง / แถบ | ความหมาย |
 |---|---|
 | 🔴 "ยังไม่ได้ส่ง" | idle — รอบนี้ยังไม่กดอะไร |
-| 🟡 "รอ popup" | คลิก eClaim3 แล้ว รอ alert/swal |
-| ⏳ "กำลังบันทึก..." | background กำลังยิง POST |
-| 🟠 "รอส่งงาน" | หลังกด "บันทึกราคา" สำเร็จ (row อยู่ใน DB แบบ `isurvey_sent=0`) |
-| 🟢 "ส่งงานแล้ว" | หลังกด "ส่งงานใหม่" สำเร็จ (flip เป็น `isurvey_sent=1`) |
+| 🟠 "รอส่งงาน" | หลังกด "บันทึกราคา" (optimistic ทันที; row อยู่ใน DB แบบ `isurvey_sent=0`) |
+| 🟢 "ส่งงานแล้ว" | หลังกด "ส่งงานใหม่" (optimistic ทันที; background flip เป็น `isurvey_sent=1`) |
 
 ### Panel UI
 - **แคบ 170px, ย่อเป็น default** — คลิก header เพื่อขยาย ลากย้ายได้
@@ -97,6 +92,10 @@ eclaim3-extension/
 
 ## Versions
 
+- **0.3.32** — Batch mode UX: ติ๊ก งานรวม/SESV → auto-expand panel + บังคับกรอก invoice ทุกช่อง (block บันทึก/ส่ง ถ้ามีช่องว่าง, กด × ลบช่องที่ไม่ใช้)
+- **0.3.31** — Auto-tick SESV เมื่อ `#txtBill_No` ขึ้นต้น "SESV" (เปลี่ยนเคลม / เปลี่ยน sub-form)
+- **0.3.30** — Click-only detection: ลบ page-inject.js + SweetAlert observer + `se-page-alert` + `onSuccessDismissed` (−293 บรรทัดใน content.js); submit status เหลือ 🔴/🟠/🟢
+- **0.3.29** — `save-many-and-flush` flush **ทุก row ของเคลม** ที่ยัง `sent=0` (แทน session-scoped) + ลบ claim-session sessionStorage; กัน duplicate เมื่อเปิดหลายเครื่องบนเคลมเดียวกัน (server-side short-circuit `skipped_already_sent` บน `sent=1`)
 - **0.3.28** — Dup label กระชับ: "เลขเคลม (ส่งแล้ว)" / "เลขเคลม (รอส่ง)" / "เลขเซอร์เวย์ (ส่งแล้ว)" / "เลขเซอร์เวย์ (รอส่ง)"
 - **0.3.27** — ปุ่ม 🧹 Clear form บน header — ล้าง 29 ช่อง (จำนวน/ราคา/ประกัน/รายละเอียด) + dispatch input+change
 - **0.3.26** — เอาวงสถานะ server ออกจาก panel header (server status เหลือเฉพาะใน popup)
