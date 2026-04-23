@@ -246,7 +246,9 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
 ### ยังเหลือ / optional
 
 - [x] **Windows service (WinSW)** บน .122 — auto-start on boot, ไม่มี terminal ให้ค้าง (สคริปต์ [`install-winsw.ps1`](install-winsw.ps1))
-- [ ] Firewall rule inbound port 3100 บน .122 (`netsh advfirewall`)
+- [x] **Firewall rule inbound port 3100** บน .122 — เปิดแล้ว (23 เม.ย. 2026)
+- [x] **ISURVEY_TIMEOUT_MS=60000** (60s แทน 15s default) — ทนต่อ upstream ช้า
+- [x] **Deployed all updates** (23 เม.ย. 2026): server short-circuit + extension v0.3.33 บนเครื่อง user ครบทุกเครื่อง
 - [ ] Dashboard ดูสถิติย้อนหลัง (optional)
 
 ---
