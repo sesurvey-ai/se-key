@@ -490,11 +490,12 @@
   // for the native alert / SweetAlert to confirm — the button click itself is
   // the signal (any iSurvey submit is idempotent via upsert_pending + server
   // short-circuit on isurvey_sent=1).
-  //   - #wuFlow1_cmdSendNew  → "ส่งงานใหม่" → save + flush iSurvey for the claim
-  //   - #btnSurvey_Update    → "บันทึกราคา" → save only (upsert pending rows)
+  //   - #wuFlow1_cmdSendNew    → "ส่งงานใหม่"       → save + flush iSurvey
+  //   - #wuFlow1_cmdSendFollow → "ส่งผลงานต่อเนื่อง" → save + flush iSurvey (same as above)
+  //   - #btnSurvey_Update      → "บันทึกราคา"       → save only (upsert pending rows)
   document.addEventListener('click', (e) => {
     if (!e.target.closest) return;
-    const newBtn    = e.target.closest('#wuFlow1_cmdSendNew');
+    const newBtn    = e.target.closest('#wuFlow1_cmdSendNew, #wuFlow1_cmdSendFollow');
     const updateBtn = e.target.closest('#btnSurvey_Update');
     if (!newBtn && !updateBtn) return;
 

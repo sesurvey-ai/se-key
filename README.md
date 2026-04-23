@@ -107,7 +107,7 @@ Chrome Extension ฝังเข้าหน้า eClaim3 + Local LAN API (Expr
   - Save row(s) ลง DB เป็น `isurvey_sent=0` (รอส่ง) — ไม่ส่ง iSurvey
   - รองรับกด **ซ้ำ** สำหรับ edit ข้อมูล — upsert UPDATE row pending เดิม, keyer เป็นคนล่าสุดเสมอ (last-write-wins)
   - รองรับ 2 คน 2 เครื่อง แก้งานเคลมเดียวกัน (ทั้งคู่กดได้ตราบใดที่ยังไม่มี "ส่งงานใหม่")
-- กด **"ส่งงานใหม่"** (`#wuFlow1_cmdSendNew`):
+- กด **"ส่งงานใหม่"** (`#wuFlow1_cmdSendNew`) หรือ **"ส่งผลงานต่อเนื่อง"** (`#wuFlow1_cmdSendFollow`):
   - Save row(s) ของหน้าปัจจุบัน
   - ยิง iSurvey **ทุก row ของเคลมนี้ที่ยัง `sent=0`** (flush-all-for-claim) → flip เป็น `isurvey_sent=1`
   - ไม่จำเป็นต้องเคยกด "บันทึกราคา" มาก่อน — flow นี้ครบในคลิกเดียว
@@ -355,7 +355,7 @@ Extension-only changes: copy `eclaim3-extension/*` แล้วทุกเค�
 
 ### Extension ไม่ยิง POST เลย (แค่ GET /api/health)
 - Open browser DevTools → ดู console ว่า extension โหลดเวอร์ชันที่ถูกต้องไหม (`[SE Survey Helper] v0.3.xx loaded`)
-- User click ปุ่มถูกไหม (`#btnSurvey_Update` หรือ `#wuFlow1_cmdSendNew`) — ถ้า eClaim3 เปลี่ยน id ต้องอัพเดต content.js
+- User click ปุ่มถูกไหม (`#btnSurvey_Update`, `#wuFlow1_cmdSendNew`, หรือ `#wuFlow1_cmdSendFollow`) — ถ้า eClaim3 เปลี่ยน id ต้องอัพเดต content.js
 
 ### Server ค้าง (ไม่ error แต่เปิด admin ไม่ได้ ต้อง restart)
 - **สาเหตุหลัก**: Windows "Quick Edit Mode" — user คลิกใน terminal `npm start` → cmd pause process รอ Enter

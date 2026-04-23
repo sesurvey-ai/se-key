@@ -38,7 +38,7 @@ eClaim3 เป็น HTTPS แต่ LAN server เป็น HTTP → Chrome blo
 - รองรับกดซ้ำเพื่อแก้ไขข้อมูล (upsert: UPDATE pending row เดิม ไม่สร้างซ้ำ)
 - Panel แสดงสถานะ 🟠 "บันทึกแล้ว รอส่งงาน" (พื้นส้ม)
 
-### กด "ส่งงานใหม่" (`#wuFlow1_cmdSendNew`)
+### กด "ส่งงานใหม่" (`#wuFlow1_cmdSendNew`) หรือ "ส่งผลงานต่อเนื่อง" (`#wuFlow1_cmdSendFollow`)
 - Save row(s) ของหน้าปัจจุบัน
 - Background ยิง iSurvey สำหรับ **ทุก row ของเคลมนี้ที่ยัง `sent=0`** → flip เป็น `isurvey_sent=1`
 - ไม่ต้องกด "บันทึกราคา" มาก่อนก็ได้ — flow ครบในคลิกเดียว
@@ -89,9 +89,11 @@ eClaim3 เป็น HTTPS แต่ LAN server เป็น HTTP → Chrome blo
 | ประเภทงาน (auto) | `#ddlAdd_No` (=`1` → งานต้น; อื่น → งานตาม) |
 | ปุ่ม "บันทึกราคา"  | `#btnSurvey_Update` |
 | ปุ่ม "ส่งงานใหม่"  | `#wuFlow1_cmdSendNew` |
+| ปุ่ม "ส่งผลงานต่อเนื่อง" | `#wuFlow1_cmdSendFollow` (behavior = "ส่งงานใหม่") |
 
 ## Versions
 
+- **0.3.33** — ตรวจจับปุ่ม `#wuFlow1_cmdSendFollow` ("ส่งผลงานต่อเนื่อง") ด้วย พฤติกรรมเหมือน "ส่งงานใหม่" (save + flush iSurvey)
 - **0.3.32** — Batch mode UX: ติ๊ก งานรวม/SESV → auto-expand panel + บังคับกรอก invoice ทุกช่อง (block บันทึก/ส่ง ถ้ามีช่องว่าง, กด × ลบช่องที่ไม่ใช้)
 - **0.3.31** — Auto-tick SESV เมื่อ `#txtBill_No` ขึ้นต้น "SESV" (เปลี่ยนเคลม / เปลี่ยน sub-form)
 - **0.3.30** — Click-only detection: ลบ page-inject.js + SweetAlert observer + `se-page-alert` + `onSuccessDismissed` (−293 บรรทัดใน content.js); submit status เหลือ 🔴/🟠/🟢
