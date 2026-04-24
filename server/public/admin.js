@@ -22,6 +22,12 @@ const els = {
   pageInfo:    $('page-info'),
   connDot:     $('conn-dot'),
 
+  checkAll:        $('check-all'),
+  bulkBar:         $('bulk-bar'),
+  bulkCount:       $('bulk-count'),
+  btnBulkDelete:   $('btn-bulk-delete'),
+  btnBulkClear:    $('btn-bulk-clear'),
+
   modal:       $('modal'),
   modalTitle:  $('modal-title'),
   form:        $('record-form'),
@@ -66,7 +72,12 @@ const state = {
   status: '',
   loading: false,
   apiKey: localStorage.getItem(API_KEY_STORAGE) || '',
+  // deleteTarget shape: { ids: number[], label: string } — works for both
+  // single-row delete (ids.length === 1) and bulk delete.
   deleteTarget: null,
+  // Set of currently-selected row ids. Cleared on every load() (filter/page
+  // change) so "selected" always means "visible right now".
+  selected: new Set(),
 };
 
 function esc(s) {
@@ -102,11 +113,15 @@ async function api(pathname, { method = 'GET', body } = {}) {
 
 function renderRows(rows) {
   if (!rows.length) {
-    els.tbody.innerHTML = '<tr><td colspan="9" style="padding:40px;text-align:center;color:#888">ไม่พบรายการ</td></tr>';
+    els.tbody.innerHTML = '<tr><td colspan="10" style="padding:40px;text-align:center;color:#888">ไม่พบรายการ</td></tr>';
+    syncCheckAll();
     return;
   }
-  els.tbody.innerHTML = rows.map((r) => `
+  els.tbody.innerHTML = rows.map((r) => {
+    const checked = state.selected.has(r.id) ? 'checked' : '';
+    return `
     <tr data-id="${esc(r.id)}">
+      <td class="col-check"><input type="checkbox" class="row-check" data-id="${esc(r.id)}" ${checked}></td>
       <td>${esc(r.id)}</td>
       <td class="created">${esc(r.created_at)}</td>
       <td class="mono">${esc(r.claim_no)}</td>
@@ -129,8 +144,28 @@ function renderRows(rows) {
           </button>
         </div>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
+  syncCheckAll();
+}
+
+// --- Selection helpers (multi-row delete) ---
+function updateBulkBar() {
+  const n = state.selected.size;
+  els.bulkCount.textContent = String(n);
+  els.bulkBar.classList.toggle('hidden', n === 0);
+}
+function syncCheckAll() {
+  const visible = els.tbody.querySelectorAll('.row-check');
+  if (!visible.length) {
+    els.checkAll.checked = false;
+    els.checkAll.indeterminate = false;
+    return;
+  }
+  let checked = 0;
+  for (const cb of visible) if (cb.checked) checked++;
+  els.checkAll.checked       = checked === visible.length;
+  els.checkAll.indeterminate = checked > 0 && checked < visible.length;
 }
 
 function renderSummary(ok, msg) {
@@ -152,6 +187,10 @@ function renderPager() {
 async function load() {
   if (state.loading) return;
   state.loading = true;
+  // Selection is scoped to the current view — clear it so we never delete
+  // a row the user can't currently see (different filter/page).
+  state.selected.clear();
+  updateBulkBar();
   renderPager();
   renderSummary(true, 'กำลังโหลด...');
 
@@ -327,6 +366,9 @@ els.form.addEventListener('submit', async (e) => {
     return;
   }
 
+  let sendFailures = 0;
+  let firstSendFailure = null;
+
   try {
     if (id) {
       // Edit mode — single-row PATCH using the edit-section fields.
@@ -364,21 +406,36 @@ els.form.addEventListener('submit', async (e) => {
         payloads.push({ claim_no, survey_no, keyer, work_type: baseType, invoice_mix: '' });
       }
 
-      // POST each, then PATCH isurvey_sent=1 on each if the user asked to
-      // save as "ส่งแล้ว" (server POST always inserts as 0).
+      // POST each record. Insert errors abort the whole flow (outer catch).
       const createdIds = [];
       for (const p of payloads) {
         const res = await api('/api/records', { method: 'POST', body: p });
         if (res?.record?.id) createdIds.push(res.record.id);
       }
+      // "ส่งแล้ว" → actually ship each new record to iSurvey. Send failures
+      // are captured per-row: the record is already saved in DB, so we close
+      // the modal, reload, and warn the user that they can retry via the
+      // "ส่งซ้ำ" button on the failed rows.
       if (sent === 1) {
         for (const cid of createdIds) {
-          await api(`/api/records/${cid}`, { method: 'PATCH', body: { isurvey_sent: 1 } });
+          try {
+            await api('/api/send-isurvey', { method: 'POST', body: { id: cid } });
+          } catch (e) {
+            sendFailures++;
+            if (!firstSendFailure) firstSendFailure = { id: cid, error: e.message };
+          }
         }
       }
     }
     closeModal(els.modal);
     load();
+    if (sendFailures) {
+      alert(
+        `ส่ง iSurvey ไม่สำเร็จ ${sendFailures} รายการ (record ถูกบันทึกไว้แล้ว)\n` +
+        `ตัวอย่าง id=${firstSendFailure.id}: ${firstSendFailure.error}\n` +
+        `กดปุ่ม "ส่งซ้ำ" ที่แถวนั้นเพื่อลองใหม่`
+      );
+    }
   } catch (err) {
     els.formErr.textContent = `บันทึกไม่สำเร็จ: ${err.message}`;
     els.formErr.classList.remove('hidden');
@@ -395,10 +452,13 @@ els.tbody.addEventListener('click', async (e) => {
 
   if (act === 'delete') {
     const row = btn.closest('tr');
-    const claim = row?.children[2]?.textContent?.trim() || '';
-    const survey = row?.children[3]?.textContent?.trim() || '';
-    state.deleteTarget = id;
-    els.delInfo.textContent = `id=${id}` + (claim ? ` (${claim}${survey ? ' / ' + survey : ''})` : '');
+    // Column indices shifted by +1 when checkbox column was added at pos 0:
+    // 0=check, 1=id, 2=created, 3=claim, 4=survey, ...
+    const claim  = row?.children[3]?.textContent?.trim() || '';
+    const survey = row?.children[4]?.textContent?.trim() || '';
+    const label  = `id=${id}` + (claim ? ` (${claim}${survey ? ' / ' + survey : ''})` : '');
+    state.deleteTarget = { ids: [Number(id)], label };
+    els.delInfo.textContent = label;
     openModal(els.delModal);
     return;
   }
@@ -408,11 +468,14 @@ els.tbody.addEventListener('click', async (e) => {
     btn.disabled = true;
     btn.textContent = 'กำลังส่ง...';
     try {
-      const body = await api('/api/send-isurvey', { method: 'POST', body: { id: Number(id) } });
-      if (body?.sent && body?.alreadySent) {
-        btn.textContent = 'ส่งแล้ว (เดิม)';
-      } else if (body?.skipped) {
+      // force: true — admin click bypasses the already-sent short-circuit
+      // so "ส่งซ้ำ" actually re-ships the payload to iSurvey instead of
+      // returning the cached alreadySent result.
+      const body = await api('/api/send-isurvey', { method: 'POST', body: { id: Number(id), force: true } });
+      if (body?.skipped) {
         btn.textContent = 'ข้ามแล้ว';
+      } else if (body?.sent && body?.resent) {
+        btn.textContent = 'ส่งซ้ำสำเร็จ ✓';
       } else if (body?.sent) {
         btn.textContent = 'ส่งสำเร็จ ✓';
       } else {
@@ -430,12 +493,22 @@ els.tbody.addEventListener('click', async (e) => {
 
 els.btnDelConfirm.addEventListener('click', async () => {
   if (!state.deleteTarget) return;
+  const { ids } = state.deleteTarget;
   els.btnDelConfirm.disabled = true;
   try {
-    await api(`/api/records/${state.deleteTarget}`, { method: 'DELETE' });
+    if (ids.length === 1) {
+      await api(`/api/records/${ids[0]}`, { method: 'DELETE' });
+    } else {
+      const res = await api('/api/records/bulk-delete', { method: 'POST', body: { ids } });
+      if (res && res.deleted < res.requested) {
+        // Some ids didn't match (e.g. deleted by someone else in the meantime)
+        // — surface it but don't treat as error.
+        console.warn('bulk-delete partial:', res);
+      }
+    }
     closeModal(els.delModal);
     state.deleteTarget = null;
-    load();
+    load();  // load() clears state.selected and reloads the list
   } catch (err) {
     alert(`ลบไม่สำเร็จ: ${err.message}`);
   } finally {
@@ -448,6 +521,46 @@ els.btnDelConfirm.addEventListener('click', async () => {
 els.btnAdd.addEventListener('click', openAddModal);
 els.btnCancel.addEventListener('click', () => closeModal(els.modal));
 els.btnDelCancel.addEventListener('click', () => { closeModal(els.delModal); state.deleteTarget = null; });
+
+// --- Selection wiring (multi-row delete) ---
+// Per-row checkbox toggles via event delegation on tbody (change event).
+els.tbody.addEventListener('change', (e) => {
+  const cb = e.target.closest('.row-check');
+  if (!cb) return;
+  const id = Number(cb.dataset.id);
+  if (cb.checked) state.selected.add(id);
+  else            state.selected.delete(id);
+  updateBulkBar();
+  syncCheckAll();
+});
+
+// Header "select all" toggles every currently-visible row checkbox.
+els.checkAll.addEventListener('change', () => {
+  const want = els.checkAll.checked;
+  for (const cb of els.tbody.querySelectorAll('.row-check')) {
+    cb.checked = want;
+    const id = Number(cb.dataset.id);
+    if (want) state.selected.add(id);
+    else      state.selected.delete(id);
+  }
+  updateBulkBar();
+});
+
+els.btnBulkClear.addEventListener('click', () => {
+  state.selected.clear();
+  for (const cb of els.tbody.querySelectorAll('.row-check')) cb.checked = false;
+  updateBulkBar();
+  syncCheckAll();
+});
+
+els.btnBulkDelete.addEventListener('click', () => {
+  if (state.selected.size === 0) return;
+  const ids = [...state.selected];
+  const label = `${ids.length} รายการที่เลือก`;
+  state.deleteTarget = { ids, label };
+  els.delInfo.textContent = label;
+  openModal(els.delModal);
+});
 
 els.btnSettings.addEventListener('click', () => {
   els.fApikey.value = state.apiKey;

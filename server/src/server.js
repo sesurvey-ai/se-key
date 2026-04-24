@@ -341,6 +341,35 @@ app.delete('/api/records/:id', (req, res) => {
   res.json({ deleted: id });
 });
 
+// Bulk delete for the admin UI's multi-select. Wrapped in a transaction so
+// either all requested rows are deleted or none are (if anything throws).
+// `deleted` may be less than `requested` if some ids didn't exist — that's
+// not an error, just a report.
+app.post('/api/records/bulk-delete', (req, res) => {
+  const { ids } = req.body ?? {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids (non-empty array) is required' });
+  }
+  const numericIds = [...new Set(ids.map(Number).filter(Number.isInteger))];
+  if (numericIds.length === 0) {
+    return res.status(400).json({ error: 'no valid numeric ids' });
+  }
+
+  const delStmt = db.prepare('DELETE FROM records WHERE id = ?');
+  const deleteMany = db.transaction((idList) => {
+    let deleted = 0;
+    for (const id of idList) {
+      const info = delStmt.run(id);
+      if (info.changes > 0) deleted++;
+    }
+    return deleted;
+  });
+  const deleted = deleteMany(numericIds);
+
+  log.info('records.bulk_delete', { requested: numericIds.length, deleted });
+  res.json({ deleted, requested: numericIds.length });
+});
+
 app.post('/api/send-isurvey', async (req, res) => {
   const { id, force } = req.body ?? {};
   if (!id) return res.status(400).json({ error: 'id is required' });

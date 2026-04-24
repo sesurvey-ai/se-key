@@ -41,10 +41,17 @@
 
   <section class="summary"><span id="summary-text">กำลังโหลด...</span></section>
 
+  <section id="bulk-bar" class="bulk-bar hidden">
+    <span class="bulk-info">เลือก <b id="bulk-count">0</b> รายการ</span>
+    <button id="btn-bulk-delete" class="btn btn-danger" type="button">ลบที่เลือก</button>
+    <button id="btn-bulk-clear"  class="btn btn-secondary" type="button">ยกเลิกการเลือก</button>
+  </section>
+
   <section class="table-wrap">
     <table id="records-table">
       <thead>
         <tr>
+          <th class="col-check"><input type="checkbox" id="check-all" title="เลือก/ยกเลิก ทั้งหมดในหน้านี้"></th>
           <th>ID</th>
           <th>เวลา</th>
           <th>เลขเคลม</th>

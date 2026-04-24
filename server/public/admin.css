@@ -59,6 +59,20 @@ body {
 .summary { padding: 8px 20px; font-size: 12px; color: #666; background: #fafbfc; border-bottom: 1px solid #e5e7eb; }
 .summary.err { color: #c62828; background: #ffebee; }
 
+.bulk-bar {
+  display: flex; gap: 10px; align-items: center;
+  padding: 10px 20px;
+  background: #e8f0fe;
+  border-bottom: 1px solid #c7d7f7;
+  font-size: 13px;
+}
+.bulk-bar.hidden { display: none; }
+.bulk-info { color: #1a73e8; font-weight: 500; flex: 1; }
+.bulk-info b { font-weight: 700; }
+
+.col-check { width: 32px; text-align: center !important; padding: 6px 4px !important; }
+.col-check input[type="checkbox"] { margin: 0; cursor: pointer; width: 16px; height: 16px; }
+
 .table-wrap { padding: 0 20px; }
 #records-table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 12px; }
 #records-table th, #records-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
