@@ -20,10 +20,19 @@ function backoffSeconds(retry_count) {
 }
 
 // Pull a superset in SQL; per-row backoff filter is cheap enough in JS.
+//
+// `retry_count > 0` is the key policy filter: only rows that already had a
+// failed send attempt are auto-retried. Rows created as "รอส่ง" without a
+// send attempt (admin "บันทึก" with "รอส่ง" status, extension "บันทึกราคา",
+// Excel import) stay at retry_count=0 and are left untouched — they require
+// explicit user action to fire off to iSurvey. `markRetryStmt` in
+// send-isurvey.js is what bumps retry_count on failure, so this filter
+// cleanly separates "failed and needs retry" from "intentionally pending".
 const pickStmt = db.prepare(`
   SELECT id, retry_count, last_retry_at
   FROM records
   WHERE isurvey_sent = 0
+    AND retry_count > 0
     AND retry_count < ?
     AND work_type IN ('งานต้น','งานตาม','งานรวม')
   ORDER BY id ASC
