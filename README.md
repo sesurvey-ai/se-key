@@ -104,15 +104,23 @@ Chrome Extension ฝังเข้าหน้า eClaim3 + Local LAN API (Expr
 
 **Save flow**
 - กด **"บันทึกราคา"** (`#btnSurvey_Update`):
-  - Save row(s) ลง DB เป็น `isurvey_sent=0` (รอส่ง) — ไม่ส่ง iSurvey
+  - Save row(s) ลง DB เป็น `isurvey_sent=0` (รอส่ง) — **ไม่ยิง iSurvey**
   - รองรับกด **ซ้ำ** สำหรับ edit ข้อมูล — upsert UPDATE row pending เดิม, keyer เป็นคนล่าสุดเสมอ (last-write-wins)
   - รองรับ 2 คน 2 เครื่อง แก้งานเคลมเดียวกัน (ทั้งคู่กดได้ตราบใดที่ยังไม่มี "ส่งงานใหม่")
 - กด **"ส่งงานใหม่"** (`#wuFlow1_cmdSendNew`) หรือ **"ส่งผลงานต่อเนื่อง"** (`#wuFlow1_cmdSendFollow`):
   - Save row(s) ของหน้าปัจจุบัน
-  - ยิง iSurvey **ทุก row ของเคลมนี้ที่ยัง `sent=0`** (flush-all-for-claim) → flip เป็น `isurvey_sent=1`
+  - ยิง iSurvey **ทุก row ของเคลมนี้เท่านั้น** ที่ยัง `sent=0` (flush-all-for-claim จำกัดที่ claim_no ปัจจุบัน ไม่ลามไปเคลมอื่น) → flip เป็น `isurvey_sent=1`
   - ไม่จำเป็นต้องเคยกด "บันทึกราคา" มาก่อน — flow นี้ครบในคลิกเดียว
   - Idempotent: กดซ้ำบน row ที่ `sent=1` → server short-circuit `skipped_already_sent`, ไม่สร้าง row + ไม่ยิง iSurvey ซ้ำ
-  - Background ทำงานทั้งหมด → reliable แม้ ASP.NET postback ทำให้หน้าเว็บ reload 10+ ครั้ง
+  - Background service worker ทำทั้ง flow → reliable แม้ ASP.NET postback ทำให้หน้าเว็บ reload 10+ ครั้ง
+
+**สรุปพฤติกรรม 3 ปุ่ม**
+
+| ปุ่ม | Save | Flush (ส่ง iSurvey) | Scope |
+|---|---|---|---|
+| บันทึกราคา | ✅ | ❌ | row(s) หน้าปัจจุบัน |
+| ส่งงานใหม่ | ✅ | ✅ | ทุก row ของ `claim_no` นี้ที่ `sent=0` |
+| ส่งผลงานต่อเนื่อง | ✅ | ✅ | เหมือน "ส่งงานใหม่" |
 
 **Batch flow (งานรวม / SESV)**
 - เปิด checkbox → ช่อง input invoice/sesv list (เพิ่มกี่เลขก็ได้ด้วยปุ่ม +)
@@ -170,6 +178,14 @@ CREATE TABLE records (
 );
 ```
 Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
+
+**Retry loop policy** ([`server/src/retry.js`](server/src/retry.js))
+
+- Default **OFF** — เปิดด้วย `RETRY_ENABLED=1` ใน `.env`
+- Loop หยิบเฉพาะ row ที่ `isurvey_sent=0` **AND `retry_count > 0`** (เคย fail มาอย่างน้อย 1 ครั้ง)
+- Row "รอส่ง" ที่ `retry_count=0` (จาก "บันทึกราคา" / Excel import / Admin สร้างใหม่) **จะไม่ถูกแตะ** — ต้องให้ user กด "ส่งงานใหม่" หรือ "iSurvey" ในแอดมินเท่านั้น
+- Exp backoff ต่อ row: `60 * 2^retry_count` วินาที, cap 1 ชั่วโมง
+- Loop ทำงาน claim-agnostic — ไม่จำกัด scope ตาม claim_no, ตรวจทุก row ใน DB ที่ match เงื่อนไขข้างต้น
 
 ### 3. Admin Web UI (`/admin`)
 
