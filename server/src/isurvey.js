@@ -1,13 +1,15 @@
-// Routing + schema (updated 2026-04-17 — columns swapped for งานรวม/SESV):
+// Routing + schema:
 //   งานต้น  → send, survey_no = record.survey_no
 //   งานตาม → send, survey_no = record.survey_no
 //   งานรวม → send, survey_no = record.survey_no  (extension puts typed value here;
 //                                                 DOM's เลขเซอร์เวย์ is in invoice_mix)
-//   SESV    → send, survey_no = record.survey_no  (same swap as งานรวม)
+//   SESV    → send, survey_no = record.invoice_mix (the linked SEABI invoice;
+//                                                   SESV-xxx itself isn't claimable
+//                                                   on iSurvey). Falls back to
+//                                                   record.survey_no when
+//                                                   invoice_mix is empty (legacy
+//                                                   rows pre-SESV-mandatory-batch).
 //   else    → skip (unknown/empty work_type)
-//
-// i.e. `record.survey_no` is now canonical for "ค่าที่ส่ง iSurvey" regardless of
-// work_type. No per-type branching needed.
 
 const FORWARDED = new Set(['งานต้น', 'งานตาม', 'งานรวม', 'SESV']);
 
@@ -22,8 +24,11 @@ function formatEmcsDate(d = new Date()) {
 }
 
 export function buildIsurveyPayload(row, { userId, password, now = new Date() } = {}) {
+  const surveyNo = (row.work_type === 'SESV' && row.invoice_mix)
+    ? row.invoice_mix
+    : row.survey_no;
   return {
-    survey_no:  row.survey_no,
+    survey_no:  surveyNo,
     claim_no:   row.claim_no,
     EMCSstatus: 'send',
     EMCSby:     row.keyer,

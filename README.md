@@ -122,11 +122,26 @@ Chrome Extension ฝังเข้าหน้า eClaim3 + Local LAN API (Expr
 | ส่งงานใหม่ | ✅ | ✅ | ทุก row ของ `claim_no` นี้ที่ `sent=0` |
 | ส่งผลงานต่อเนื่อง | ✅ | ✅ | เหมือน "ส่งงานใหม่" |
 
-**Batch flow (งานรวม / SESV)**
-- เปิด checkbox → ช่อง input invoice/sesv list (เพิ่มกี่เลขก็ได้ด้วยปุ่ม +)
+**Batch flow (งานรวม)** — สำหรับ baseType = `งานต้น` หรือ `งานตาม`
+- เปิด checkbox "งานรวม" → ช่อง input invoice list (เพิ่มกี่เลขก็ได้ด้วยปุ่ม +)
 - กดบันทึกครั้งเดียวได้ N+1 row:
-  - 1 primary: claim + page's survey, work_type = baseType (งานต้น/งานตาม)
-  - N follow-up: claim + invoice_value, work_type = "งานตาม", invoice_mix = page's survey
+  - 1 primary: claim + page's survey, work_type = baseType (งานต้น/งานตาม), `invoice_mix=''`
+  - N follow-up: claim + typed value, work_type = `งานรวม`, `invoice_mix` = page's survey
+
+**SESV flow** — locked เข้า "งานรวม" เสมอ
+- เลือก radio `SESV` → checkbox "งานรวม" auto-tick + **disable** (untick ไม่ได้) → ช่อง list invoice โผล่
+- เพราะเลข `SESV-xxx` เองเคลมเงินบน iSurvey ไม่ได้ — ต้อง reference ไปที่เลข SEABI invoice เสมอ
+- กรอก list ≥ 1 เลข (validation block click ถ้าว่าง)
+- Auto-detect: ถ้า `#txtBill_No` ขึ้นต้น `SESV` → เลือก SESV ให้อัตโนมัติ
+- Payload structure (ต่างจาก งานรวม ตรงที่ primary ผูก invoice_mix ด้วย):
+  - 1 primary: `survey_no` = page's SESV-xxx, `work_type='SESV'`, `invoice_mix` = **`mixValues[0]`** (SEABI ตัวแรก — ใช้ส่ง iSurvey จริง)
+  - N-1 follow-up: `survey_no` = `mixValues[1..]`, `work_type='งานรวม'`, `invoice_mix` = page's SESV-xxx
+- iSurvey routing สำหรับ work_type='SESV': ฝั่ง server เปลี่ยน `survey_no` ที่ส่ง upstream เป็น `row.invoice_mix` (SEABI) — เพราะ SESV ไม่ใช่ตัวเคลม
+- **Defense-in-depth guards** สำหรับ SESV+invoice_mix:
+  1. Extension `validateBatchInputs` — block click ถ้าช่อง list ว่าง
+  2. Server `POST /api/records` → 400 ถ้า `work_type='SESV' && !invoice_mix`
+  3. Server `PATCH /api/records/:id` → 400 ถ้า post-merge state เป็น SESV ไม่มี invoice_mix
+  4. `sendRecordToIsurvey` → refuse + mark `retry_error='SESV missing invoice_mix...'` (HTTP 422)
 
 **โครงสร้างไฟล์**
 ```
@@ -247,6 +262,7 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
   - [x] **"ส่งงานใหม่" flush-all-for-claim**: ยิง iSurvey ทุก row ของเคลมที่ยัง `sent=0` ไม่ว่าจะสร้างจาก session ไหน เครื่องไหน (v0.3.29)
   - [x] Batch flow งานรวม/SESV: 1 primary + N follow-up ในคลิกเดียว
   - [x] **Auto-tick SESV** เมื่อ `#txtBill_No` ขึ้นต้น "SESV" + panel auto-expand + บังคับกรอก invoice ทุกช่อง (block click ถ้าว่าง) (v0.3.31 / v0.3.32)
+  - [x] **SESV ↔ งานรวม locked** + invoice_mix mandatory: เลือก SESV → checkbox "งานรวม" auto-tick + disabled (untick ไม่ได้); primary row ผูก `mixValues[0]` เป็น invoice_mix; iSurvey ส่งด้วย invoice_mix แทน SESV-xxx; server-side guards ที่ POST/PATCH `/api/records` + `sendRecordToIsurvey` (defense-in-depth 4 layers)
   - [x] **ตรวจจับปุ่ม "ส่งผลงานต่อเนื่อง"** (`#wuFlow1_cmdSendFollow`) — behavior เหมือน "ส่งงานใหม่" (v0.3.33)
   - [x] Submit status: 🔴 "ยังไม่ได้ส่ง" / 🟠 "รอส่งงาน" / 🟢 "ส่งงานแล้ว"
   - [x] **Submit status dot** บน header panel — เห็นสีสถานะได้แม้ panel ย่อ

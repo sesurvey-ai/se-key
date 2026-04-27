@@ -47,16 +47,29 @@ const auth = { userId: 'sesurvey', password: 'pass1234', now: fixedNow };
   console.log('✓ งานรวม sends record.survey_no (typed value after swap)');
 }
 
-// SESV (same schema as งานรวม)
+// SESV: SESV-xxx itself isn't claimable on iSurvey, so the iSurvey payload
+// uses invoice_mix (the linked SEABI invoice) as survey_no.
 {
   const p = buildIsurveyPayload({
     claim_no: 'C',
-    survey_no: 'SESV-REF-001',     // typed
+    survey_no: 'SESV-6901111',          // page survey (stored locally as ref)
     keyer: 'k', work_type: 'SESV',
-    invoice_mix: 'SEABI-999',      // DOM
+    invoice_mix: 'SEABI-210260204444',  // first invoice (claimable on iSurvey)
   }, auth);
-  assert.equal(p.survey_no, 'SESV-REF-001');
-  console.log('✓ SESV sends record.survey_no (typed value after swap)');
+  assert.equal(p.survey_no, 'SEABI-210260204444',
+    'SESV must send invoice_mix as survey_no — SESV-xxx isn\'t claimable');
+  console.log('✓ SESV sends invoice_mix as survey_no');
+}
+
+// SESV legacy fallback: rows saved before SESV+งานรวม became mandatory may
+// have invoice_mix='' — fall back to survey_no so retry loop can still flush.
+{
+  const p = buildIsurveyPayload({
+    claim_no: 'C', survey_no: 'SESV-LEGACY-001',
+    keyer: 'k', work_type: 'SESV', invoice_mix: '',
+  }, auth);
+  assert.equal(p.survey_no, 'SESV-LEGACY-001');
+  console.log('✓ SESV with empty invoice_mix falls back to survey_no');
 }
 
 // Routing: งานต้น/งานตาม/งานรวม/SESV all forwarded. Unknown/empty skipped.

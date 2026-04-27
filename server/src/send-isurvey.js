@@ -92,14 +92,30 @@ export async function sendRecordToIsurvey(id, { force = false } = {}) {
   // resend shouldn't count against MAX_ATTEMPTS.
   const isForceResend = row.isurvey_sent === 1;
 
-  // SESV / unknown work_types: flip the flag locally so retry loop leaves
-  // them alone, but don't call iSurvey.
+  // Unknown work_types: flip the flag locally so retry loop leaves them
+  // alone, but don't call iSurvey.
   if (!shouldSendToIsurvey(row)) {
     markSentStmt.run(id);
     return {
       sent: false, skipped: true,
       reason: `work_type "${row.work_type}" is not forwarded to iSurvey`,
       record: selectByIdStmt.get(id),
+    };
+  }
+
+  // SESV needs invoice_mix (the linked SEABI invoice) — SESV-xxx itself
+  // isn't claimable. Refuse to send if missing; mark retry_error so it
+  // shows up in admin and stays sent=0 (legacy/admin-broken rows). Doesn't
+  // count against retry attempts since the issue isn't transient.
+  if (row.work_type === 'SESV' && !row.invoice_mix) {
+    const errMsg = 'SESV missing invoice_mix — refusing to send';
+    if (!isForceResend) markRetryStmt.run(errMsg, id);
+    log.warn('isurvey.refuse_sesv_no_invoice', { id, claim_no: row.claim_no });
+    return {
+      sent: false,
+      refused: true,
+      error: errMsg,
+      attempts: 0,
     };
   }
 

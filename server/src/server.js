@@ -271,6 +271,16 @@ app.post('/api/records', (req, res) => {
     invoice_mix: String(invoice_mix).trim(),
   };
 
+  // SESV requires invoice_mix — SESV-xxx itself isn't claimable on iSurvey,
+  // the linked SEABI invoice (in invoice_mix) is what gets sent. Defense-in-
+  // depth: extension already blocks at click time, but also reject here so
+  // direct API calls / admin edits can't bypass.
+  if (clean.work_type === 'SESV' && !clean.invoice_mix) {
+    return res.status(400).json({
+      error: 'SESV records require invoice_mix (the linked SEABI invoice)',
+    });
+  }
+
   // upsert_pending = true (extension buttons: บันทึกราคา / ส่งงานใหม่):
   //   1. If (claim, survey) already has isurvey_sent=1 → short-circuit. Extension
   //      shouldn't be able to re-save or re-send already-flushed work — returning
@@ -315,7 +325,7 @@ const EDITABLE_FIELDS = ['claim_no', 'survey_no', 'keyer', 'work_type', 'invoice
 app.patch('/api/records/:id', (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'invalid id' });
-  const existing = db.prepare('SELECT id FROM records WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT * FROM records WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'record not found' });
 
   const sets = [];
@@ -327,6 +337,21 @@ app.patch('/api/records/:id', (req, res) => {
     }
   }
   if (!sets.length) return res.status(400).json({ error: 'no editable fields provided' });
+
+  // Same SESV+invoice_mix invariant as POST: validate the *post-merge* state
+  // so admin edits can't strip invoice_mix or flip work_type to SESV without
+  // an invoice_mix already present.
+  const merged = {
+    work_type:   Object.prototype.hasOwnProperty.call(params, 'work_type')
+      ? params.work_type   : existing.work_type,
+    invoice_mix: Object.prototype.hasOwnProperty.call(params, 'invoice_mix')
+      ? params.invoice_mix : existing.invoice_mix,
+  };
+  if (merged.work_type === 'SESV' && !merged.invoice_mix) {
+    return res.status(400).json({
+      error: 'SESV records require invoice_mix (the linked SEABI invoice)',
+    });
+  }
 
   db.prepare(`UPDATE records SET ${sets.join(', ')} WHERE id = @id`).run(params);
   const row = db.prepare('SELECT * FROM records WHERE id = ?').get(id);
@@ -380,6 +405,9 @@ app.post('/api/send-isurvey', async (req, res) => {
   if (result.sent && result.alreadySent) return res.json(result);
   if (result.skipped) return res.json(result);
   if (result.sent)    return res.json(result);
+
+  // Local refusal (e.g. SESV without invoice_mix) — not an upstream failure.
+  if (result.refused) return res.status(422).json({ error: result.error });
 
   // upstream 5xx or network error
   res.status(502).json({

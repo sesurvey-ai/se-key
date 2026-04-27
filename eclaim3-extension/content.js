@@ -41,13 +41,13 @@
         <label class="se-label" id="se-survey-label">เลขเซอร์เวย์</label>
         <div id="se-survey" class="se-value se-empty">รอข้อมูล...</div>
       </div>
-      <div class="se-row se-radio-row">
+      <div class="se-row se-radio-row se-radio-row-3">
         <label class="se-radio"><input type="radio" name="se-work" value="งานต้น" checked> งานต้น</label>
         <label class="se-radio"><input type="radio" name="se-work" value="งานตาม"> งานตาม</label>
+        <label class="se-radio"><input type="radio" name="se-work" value="SESV"> SESV</label>
       </div>
       <div class="se-row se-check-row">
         <label class="se-check"><input type="checkbox" id="se-check-mix"  value="งานรวม"> งานรวม</label>
-        <label class="se-check"><input type="checkbox" id="se-check-sesv" value="SESV"> SESV</label>
       </div>
       <div class="se-row" id="se-mix-row" hidden>
         <label class="se-label">เลข invoice (งานรวม)</label>
@@ -57,15 +57,6 @@
           </div>
         </div>
         <button type="button" id="se-mix-add" class="se-mix-add">+ เพิ่มอีกเลข</button>
-      </div>
-      <div class="se-row" id="se-sesv-row" hidden>
-        <label class="se-label">เลขเซอร์เวย์</label>
-        <div id="se-sesv-list">
-          <div class="se-sesv-item">
-            <input type="text" class="se-input se-sesv-input">
-          </div>
-        </div>
-        <button type="button" id="se-sesv-add" class="se-sesv-add">+ เพิ่มอีกเลข</button>
       </div>
       <div class="se-row se-keyer-row">
         <span class="se-keyer-label">ผู้คีย์:</span>
@@ -100,13 +91,9 @@
     survey:      $('se-survey'),
     radios:      panel.querySelectorAll('input[name="se-work"]'),
     mixCheck:    $('se-check-mix'),
-    sesvCheck:   $('se-check-sesv'),
     mixRow:      $('se-mix-row'),
     mixList:     $('se-mix-list'),
     mixAddBtn:   $('se-mix-add'),
-    sesvRow:     $('se-sesv-row'),
-    sesvList:    $('se-sesv-list'),
-    sesvAddBtn:  $('se-sesv-add'),
     keyer:       $('se-keyer'),
     submitStatus: $('se-submit-status'),
     submitIcon:   $('se-submit-icon'),
@@ -124,17 +111,20 @@
   // ---------- State ----------
   //
   // workType (effective, used for save) = batchMode || baseType
-  //   baseType  — chosen via radio (auto-detected from ddlAdd_No on new claim):
-  //               'งานต้น' when ddlAdd_No === '1' or missing, else 'งานตาม'.
-  //   batchMode — chosen via checkbox: 'งานรวม' | 'SESV' | null.
-  //               When set, radios are disabled and workType = batchMode.
+  //   baseType  — chosen via radio: 'งานต้น' | 'งานตาม' | 'SESV'.
+  //               Auto-detected on new claim:
+  //                 survey_no starts "SESV"        → 'SESV'
+  //                 ddlAdd_No === '1' or missing   → 'งานต้น'
+  //                 ddlAdd_No anything else        → 'งานตาม'
+  //   batchMode — chosen via checkbox: 'งานรวม' | null.
+  //               When set, primary row uses baseType, followups use 'งานรวม'.
   const state = {
     claimNo:     '',
     surveyNo:    '',
     keyer:       '',
     addNo:       '',            // ddlAdd_No value from page
-    baseType:    'งานต้น',     // radio selection
-    batchMode:   null,          // 'งานรวม' | 'SESV' | null
+    baseType:    'งานต้น',     // radio selection: งานต้น | งานตาม | SESV
+    batchMode:   null,          // 'งานรวม' | null
     workType:    'งานต้น',     // effective = batchMode || baseType
     lastAutoClaim: null,        // claim for which we last reset batchMode
     claimDup:    false,
@@ -344,14 +334,21 @@
     state.baseType = type;
     for (const r of els.radios) r.checked = (r.value === type);
     recomputeWorkType();
+    // SESV is locked into งานรวม — its own number isn't claimable on iSurvey,
+    // so an invoice_mix (SEABI-xxx) is mandatory. Auto-tick + disable the
+    // checkbox so the user can't undo it.
+    if (type === 'SESV' && state.batchMode !== 'งานรวม') {
+      setBatchMode('งานรวม');
+    }
+    els.mixCheck.disabled = (type === 'SESV');
+    els.mixCheck.title    = (type === 'SESV') ? 'SESV ต้องใช้คู่กับงานรวมเสมอ' : '';
   }
 
   // mode: 'งานรวม' | 'SESV' | null
+  // mode: 'งานรวม' | null
   function setBatchMode(mode) {
     state.batchMode = mode;
-    els.mixCheck.checked  = mode === 'งานรวม';
-    els.sesvCheck.checked = mode === 'SESV';
-    for (const r of els.radios) r.disabled = Boolean(mode);
+    els.mixCheck.checked = mode === 'งานรวม';
     recomputeWorkType();
     // Entering batch mode means the user needs to see + fill the invoice list
     // — expand the panel automatically.
@@ -360,28 +357,24 @@
 
   els.radios.forEach((r) => r.addEventListener('change', () => {
     if (r.checked) {
-      state.baseType = r.value;
-      recomputeWorkType();
+      // Route through setBaseType so SESV → auto-tick งานรวม fires for
+      // manual clicks too (not just auto-detect via refreshFromPage).
+      setBaseType(r.value);
       render();
     }
   }));
 
   els.mixCheck.addEventListener('change', () => {
+    // SESV is locked into งานรวม. Reject any attempt to untick.
+    if (state.baseType === 'SESV' && !els.mixCheck.checked) {
+      els.mixCheck.checked = true;
+      return;
+    }
     if (els.mixCheck.checked) {
       setBatchMode('งานรวม');
     } else {
       setBatchMode(null);
       resetMixList();
-    }
-    render();
-  });
-
-  els.sesvCheck.addEventListener('change', () => {
-    if (els.sesvCheck.checked) {
-      setBatchMode('SESV');
-    } else {
-      setBatchMode(null);
-      resetSesvList();
     }
     render();
   });
@@ -424,60 +417,16 @@
     `;
   }
 
-  // ---------- SESV: same dynamic list pattern as งานรวม ----------
-  els.sesvList.addEventListener('input', render);
-  els.sesvList.addEventListener('click', (e) => {
-    const btn = e.target.closest('.se-sesv-remove');
-    if (!btn) return;
-    const item = btn.closest('.se-sesv-item');
-    if (item && els.sesvList.children.length > 1) {
-      item.remove();
-      render();
-    }
-  });
-  els.sesvAddBtn.addEventListener('click', () => {
-    const item = document.createElement('div');
-    item.className = 'se-sesv-item';
-    item.innerHTML = `
-      <input type="text" class="se-input se-sesv-input">
-      <button type="button" class="se-sesv-remove" title="ลบช่องนี้">×</button>
-    `;
-    els.sesvList.appendChild(item);
-    item.querySelector('input').focus();
-    render();
-  });
-
-  function getFilledSesvValues() {
-    return [...els.sesvList.querySelectorAll('.se-sesv-input')]
-      .map((i) => i.value.trim())
-      .filter(Boolean);
-  }
-
-  function resetSesvList() {
-    els.sesvList.innerHTML = `
-      <div class="se-sesv-item">
-        <input type="text" class="se-input se-sesv-input">
-      </div>
-    `;
-  }
-
-  // In batch mode (งานรวม / SESV) every visible input row must be filled.
-  // User can either type a value in each row or click × to remove the row —
-  // empty rows are never accepted. Returns { ok, error, focus } where focus
-  // is the first empty input so we can highlight it.
+  // In batch mode (งานรวม) every visible input row must be filled. User can
+  // either type a value in each row or click × to remove the row — empty rows
+  // are never accepted. Returns { ok, error, focus } where focus is the first
+  // empty input so we can highlight it.
   function validateBatchInputs() {
     if (state.batchMode === 'งานรวม') {
       const inputs = [...els.mixList.querySelectorAll('.se-mix-input')];
       for (const inp of inputs) {
         if (!inp.value.trim()) {
           return { ok: false, error: 'กรอกเลข invoice ให้ครบทุกช่อง หรือลบช่องว่างออก (×)', focus: inp };
-        }
-      }
-    } else if (state.batchMode === 'SESV') {
-      const inputs = [...els.sesvList.querySelectorAll('.se-sesv-input')];
-      for (const inp of inputs) {
-        if (!inp.value.trim()) {
-          return { ok: false, error: 'กรอกเลขเซอร์เวย์ให้ครบทุกช่อง หรือลบช่องว่างออก (×)', focus: inp };
         }
       }
     }
@@ -492,10 +441,11 @@
   // short-circuit on isurvey_sent=1).
   //   - #wuFlow1_cmdSendNew    → "ส่งงานใหม่"       → save + flush iSurvey
   //   - #wuFlow1_cmdSendFollow → "ส่งผลงานต่อเนื่อง" → save + flush iSurvey (same as above)
+  //   - #wuFlow1_cmdSendEdit   → "ส่งงานแก้ไข"      → save + flush iSurvey (same as above)
   //   - #btnSurvey_Update      → "บันทึกราคา"       → save only (upsert pending rows)
   document.addEventListener('click', (e) => {
     if (!e.target.closest) return;
-    const newBtn    = e.target.closest('#wuFlow1_cmdSendNew, #wuFlow1_cmdSendFollow');
+    const newBtn    = e.target.closest('#wuFlow1_cmdSendNew, #wuFlow1_cmdSendFollow, #wuFlow1_cmdSendEdit');
     const updateBtn = e.target.closest('#btnSurvey_Update');
     if (!newBtn && !updateBtn) return;
 
@@ -524,29 +474,36 @@
       persistLastSaved(src, state.claimNo);
 
       // Build the set of rows to save.
-      //   งานต้น/งานตาม (no batch) → single row from the page.
-      //   งานรวม / SESV (batch)    → one "primary" row from the page (using
-      //     state.baseType — งานต้น/งานตาม as determined by ddlAdd_No) plus
-      //     one "งานตาม" row per invoice/sesv input, with invoice_mix set to
-      //     the page's survey_no so the batch rows link back to the origin.
+      //   no batch (radio only)           → single row, work_type = baseType
+      //                                     (งานต้น | งานตาม).
+      //   งานต้น/งานตาม + งานรวม          → primary (work_type = baseType,
+      //                                     invoice_mix='') + 1 followup per
+      //                                     input (work_type='งานรวม',
+      //                                     invoice_mix = page survey).
+      //   SESV (always งานรวม-locked)     → primary (work_type='SESV',
+      //                                     invoice_mix = mixValues[0] —
+      //                                     SESV alone isn't claimable on
+      //                                     iSurvey, the linked SEABI invoice
+      //                                     is what gets sent) + 1 followup
+      //                                     per remaining input.
       const payloads = [];
-      if (state.workType === 'งานรวม' || state.workType === 'SESV') {
+      const mixValues = getFilledMixValues();
+      if (state.workType === 'งานรวม') {
+        const primaryInvoiceMix = state.baseType === 'SESV' ? (mixValues[0] || '') : '';
+        const followupValues    = state.baseType === 'SESV' ? mixValues.slice(1)   : mixValues;
         payloads.push({
           claim_no:    state.claimNo,
           survey_no:   state.surveyNo,
           keyer:       state.keyer,
           work_type:   state.baseType,
-          invoice_mix: '',
+          invoice_mix: primaryInvoiceMix,
         });
-        const values = state.workType === 'งานรวม'
-          ? getFilledMixValues()
-          : getFilledSesvValues();
-        for (const v of values) {
+        for (const v of followupValues) {
           payloads.push({
             claim_no:    state.claimNo,
             survey_no:   v,
             keyer:       state.keyer,
-            work_type:   'งานตาม',
+            work_type:   state.batchMode,
             invoice_mix: state.surveyNo,
           });
         }
@@ -604,23 +561,14 @@
 
   // ---------- Render ----------
   function render() {
-    // Claim field — red if dup has any "ส่งแล้ว", orange if dup is all "รอส่ง".
+    // Claim field — neutral for all dup states (color status only on survey).
+    els.claimLabel.textContent = 'เลขเคลม';
     if (state.claimNo) {
       els.claim.textContent = state.claimNo;
-      if (state.claimDup && state.claimSent) {
-        els.claimLabel.textContent = 'เลขเคลม (ส่งแล้ว)';
-        els.claim.className = 'se-value se-dup';
-      } else if (state.claimDup) {
-        els.claimLabel.textContent = 'เลขเคลม (รอส่ง)';
-        els.claim.className = 'se-value se-pending';
-      } else {
-        els.claimLabel.textContent = 'เลขเคลม';
-        els.claim.className = 'se-value se-found';
-      }
+      els.claim.className = 'se-value';
     } else {
       els.claim.textContent = 'ไม่พบข้อมูล';
       els.claim.className = 'se-value se-empty';
-      els.claimLabel.textContent = 'เลขเคลม';
     }
 
     // Survey field — same 3-state coloring.
@@ -652,8 +600,7 @@
     }
 
     // Work-type rows
-    els.mixRow.hidden  = state.workType !== 'งานรวม';
-    els.sesvRow.hidden = state.workType !== 'SESV';
+    els.mixRow.hidden = state.workType !== 'งานรวม';
 
     renderSubmitStatus();
   }
@@ -672,12 +619,16 @@
 
     if (lastSavedFresh) {
       if (state.lastSavedSrc === 'update') {
-        icon = '🟠'; text = 'รอส่งงาน'; cls = 'se-submit-saved-pending';
+        icon = '🟠'; text = 'รอส่ง'; cls = 'se-submit-saved-pending';
       } else {
-        icon = '🟢'; text = 'ส่งงานแล้ว'; cls = 'se-submit-confirmed';
+        icon = '🔵'; text = 'ส่งแล้ว'; cls = 'se-submit-confirmed';
       }
+    } else if (state.surveySent || state.claimSent) {
+      icon = '🔵'; text = 'ส่งแล้ว'; cls = 'se-submit-confirmed';
+    } else if (state.surveyDup || state.claimDup) {
+      icon = '🟠'; text = 'รอส่ง'; cls = 'se-submit-saved-pending';
     } else {
-      icon = '🔴'; text = 'ยังไม่ได้ส่ง'; cls = 'se-submit-idle';
+      icon = '🟢'; text = 'ยังไม่ส่ง'; cls = 'se-submit-idle';
     }
 
     els.submitIcon.textContent = icon;
@@ -724,18 +675,22 @@
     state.keyer    = v.keyer;
     state.addNo    = v.addNo;
 
-    // Auto-pick base type from ddlAdd_No + batch mode from survey prefix.
-    //   - On new claim: always re-apply. Batch mode auto-ticks SESV when
-    //     survey_no starts with "SESV" (eClaim3 SESV sub-form), otherwise off.
-    //   - On same claim but survey changed to a SESV-prefixed one: auto-tick SESV.
-    //   - On same claim, addNo changed: update base type only if not in batch
-    //     mode (don't yank radio selection out from under a disabled state).
+    // Auto-pick base type. SESV-prefixed survey wins over ddlAdd_No.
+    //   - On new claim: always re-apply both batch reset + base type.
+    //   - On same claim but survey changed to a SESV-prefixed one: flip
+    //     baseType to 'SESV' (survey prefix is the strongest signal).
+    //   - On same claim, addNo changed: only update base type if currently
+    //     not on 'SESV' (don't yank a deliberate SESV selection).
+    function autoBaseType(addNo, surveyNo) {
+      if (surveyNo && surveyNo.startsWith('SESV')) return 'SESV';
+      return baseTypeFromAddNo(addNo);
+    }
+
     if (claimChanged) {
       state.lastAutoClaim = v.claimNo;
-      setBatchMode(isSesvSurvey ? 'SESV' : null);
+      setBatchMode(null);
       resetMixList();
-      resetSesvList();
-      setBaseType(baseTypeFromAddNo(v.addNo));
+      setBaseType(autoBaseType(v.addNo, v.surveyNo));
       // Drop the "บันทึกแล้ว รอส่งงาน" feedback when the user moves to a
       // different claim — it only applies to the one we just saved.
       if (state.lastSavedClaim && state.lastSavedClaim !== v.claimNo) {
@@ -744,10 +699,10 @@
         state.lastSavedClaim = null;
         try { sessionStorage.removeItem(SE_LAST_SAVED_KEY); } catch (_) { /* ignore */ }
       }
-    } else if (surveyChanged && isSesvSurvey && state.batchMode !== 'SESV') {
-      // Same claim, user navigated to a SESV sub-form — flip to SESV mode.
-      setBatchMode('SESV');
-    } else if (addNoChanged && !state.batchMode) {
+    } else if (surveyChanged && isSesvSurvey && state.baseType !== 'SESV') {
+      // Same claim, user navigated to a SESV sub-form — flip baseType to SESV.
+      setBaseType('SESV');
+    } else if (addNoChanged && state.baseType !== 'SESV') {
       setBaseType(baseTypeFromAddNo(v.addNo));
     }
 
