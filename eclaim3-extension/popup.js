@@ -49,6 +49,26 @@ async function pingHealth() {
 
 const normalize = (s) => String(s || '').trim().replace(/\/+$/, '');
 
+function originPattern(url) {
+  try { return `${new URL(url).origin}/*`; } catch { return null; }
+}
+
+function ensureHostPermission(url) {
+  const pattern = originPattern(url);
+  if (!pattern) return Promise.resolve({ ok: false, error: 'URL ไม่ถูกต้อง' });
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [pattern] }, (has) => {
+      if (has) return resolve({ ok: true });
+      chrome.permissions.request({ origins: [pattern] }, (granted) => {
+        if (chrome.runtime.lastError) {
+          return resolve({ ok: false, error: chrome.runtime.lastError.message });
+        }
+        resolve(granted ? { ok: true } : { ok: false, error: 'user ปฏิเสธ permission' });
+      });
+    });
+  });
+}
+
 function sendToBackground(msg) {
   return new Promise((resolve, reject) => {
     try {
@@ -66,6 +86,9 @@ testBtn.addEventListener('click', async () => {
   const url = normalize(urlInput.value);
   const apiKey = keyInput.value.trim();
   if (!url) return setStatus('กรอก URL ก่อน', 'err');
+
+  const perm = await ensureHostPermission(url);
+  if (!perm.ok) { setConnDot('err'); return setStatus(`ขอ permission ไม่ได้: ${perm.error}`, 'err'); }
 
   try {
     // Save URL+key so background uses them for the health ping.
@@ -87,11 +110,15 @@ testBtn.addEventListener('click', async () => {
   }
 });
 
-saveBtn.addEventListener('click', () => {
+saveBtn.addEventListener('click', async () => {
   setStatus('คลิกบันทึกแล้ว...', 'busy');
   const url = normalize(urlInput.value);
   const apiKey = keyInput.value.trim();
   if (!url) return setStatus('กรอก URL ก่อน', 'err');
+
+  const perm = await ensureHostPermission(url);
+  if (!perm.ok) return setStatus(`ขอ permission ไม่ได้: ${perm.error}`, 'err');
+
   chrome.storage.local.set({ serverUrl: url, apiKey }, () => {
     setStatus(`บันทึกแล้ว ✓ → ${url} ${apiKey ? '+ key' : '(ไม่มี key)'}`, 'ok');
   });

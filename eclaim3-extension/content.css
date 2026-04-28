@@ -28,7 +28,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 6px 10px;
-  background: #1a73e8;
+  background: #424242;
   color: #fff;
   cursor: move;
 }
@@ -52,11 +52,13 @@
   transition: background 0.2s;
   flex-shrink: 0;
 }
-.se-submit-dot.se-submit-idle          { background: #ff3b30; }
-.se-submit-dot.se-submit-pending       { background: #ffc107; }
+/* Color semantics: idle = no DB row (green), saved-pending = DB pending or
+   session save (orange), confirmed = DB sent or session send (blue). Class
+   names are historical — colors no longer match the original red/green/orange
+   "danger/ok" convention. */
+.se-submit-dot.se-submit-idle          { background: #34c759; }
 .se-submit-dot.se-submit-saved-pending { background: #ff9800; }
-.se-submit-dot.se-submit-confirmed     { background: #34c759; }
-.se-submit-dot.se-submit-busy          { background: #1a73e8; }
+.se-submit-dot.se-submit-confirmed     { background: #1a73e8; }
 
 #se-panel-toggle {
   font-size: 14px; font-weight: bold; cursor: pointer;
@@ -99,11 +101,17 @@
   letter-spacing: 0.3px;
 }
 
+#se-claim-label,
+#se-survey-label {
+  font-weight: 800;
+  color: #222;
+}
+
 .se-value {
   padding: 5px 7px;
   border-radius: 5px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
   text-align: center;
   transition: all 0.2s;
   word-break: break-all;
@@ -144,11 +152,11 @@
   color: #2e7d32;
   border: 1px solid #a5d6a7;
 }
-/* Duplicate with at least one "ส่งแล้ว" record — hard block (red) */
+/* Duplicate with at least one "ส่งแล้ว" record — informational (blue) */
 .se-value.se-dup {
-  background: #ffebee;
-  color: #c62828;
-  border: 1px solid #ef9a9a;
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #64b5f6;
 }
 /* Duplicate but all existing copies are "รอส่ง" — soft warn (orange) */
 .se-value.se-pending {
@@ -165,6 +173,7 @@
   gap: 2px 4px;
   margin-top: 2px;
 }
+.se-radio-row-3 { grid-template-columns: 1fr 1fr 1fr; }
 .se-check-row { margin-top: 2px; }
 .se-radio,
 .se-check {
@@ -181,17 +190,6 @@
 .se-check:hover { background: #f0f6ff; }
 .se-radio input,
 .se-check input { margin: 0; }
-
-/* Disabled radio — shown grayed out when a batch checkbox is active */
-.se-radio input:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-.se-radio:has(input:disabled) {
-  color: #999;
-  cursor: not-allowed;
-  background: transparent;
-}
 
 /* --- Inputs --- */
 .se-input {
@@ -211,19 +209,15 @@
   box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
-/* --- Dynamic list (งานรวม + SESV: add multiple numbers) --- */
-#se-mix-list,
-#se-sesv-list { display: flex; flex-direction: column; gap: 4px; }
-.se-mix-item,
-.se-sesv-item {
+/* --- Dynamic list (งานรวม: add multiple invoice numbers) --- */
+#se-mix-list { display: flex; flex-direction: column; gap: 4px; }
+.se-mix-item {
   display: flex;
   align-items: center;
   gap: 3px;
 }
-.se-mix-item .se-input,
-.se-sesv-item .se-input { flex: 1; min-width: 0; }
-.se-mix-remove,
-.se-sesv-remove {
+.se-mix-item .se-input { flex: 1; min-width: 0; }
+.se-mix-remove {
   flex-shrink: 0;
   width: 22px;
   height: 26px;
@@ -237,10 +231,8 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.se-mix-remove:hover,
-.se-sesv-remove:hover { background: #ef9a9a; color: #fff; }
-.se-mix-add,
-.se-sesv-add {
+.se-mix-remove:hover { background: #ef9a9a; color: #fff; }
+.se-mix-add {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -255,8 +247,7 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.se-mix-add:hover,
-.se-sesv-add:hover { background: #d2e3fc; }
+.se-mix-add:hover { background: #d2e3fc; }
 
 /* --- Submit-gate status (replaces manual save button) --- */
 .se-submit-status {
@@ -274,11 +265,9 @@
 .se-submit-status #se-submit-icon { font-size: 12px; }
 .se-submit-status #se-submit-text { flex: 1; line-height: 1.2; }
 
-.se-submit-idle          { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
-.se-submit-pending       { background: #fff8e1; color: #b28704; border-color: #ffd54f; }
-.se-submit-confirmed     { background: #e8f5e9; color: #2e7d32; border-color: #81c784; }
-.se-submit-busy          { background: #e3f2fd; color: #1565c0; border-color: #64b5f6; }
+.se-submit-idle          { background: #e8f5e9; color: #2e7d32; border-color: #81c784; }
 .se-submit-saved-pending { background: #fff3e0; color: #e65100; border-color: #ffb74d; }
+.se-submit-confirmed     { background: #e3f2fd; color: #1565c0; border-color: #64b5f6; }
 
 /* --- Status (used for save flow + server errors; hidden when empty) --- */
 .se-status {

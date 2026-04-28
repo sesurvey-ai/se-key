@@ -15,8 +15,29 @@ async function getConfig() {
   };
 }
 
+function originPattern(url) {
+  try { return `${new URL(url).origin}/*`; } catch { return null; }
+}
+
+function hasHostPermission(pattern) {
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [pattern] }, (has) => resolve(!!has));
+  });
+}
+
 async function apiFetch(path, init = {}) {
   const { base, apiKey } = await getConfig();
+  const pattern = originPattern(base);
+  if (!pattern) {
+    return { ok: false, status: 0, body: { error: `LAN URL ไม่ถูกต้อง: ${base}` } };
+  }
+  if (!(await hasHostPermission(pattern))) {
+    return {
+      ok: false,
+      status: 0,
+      body: { error: `ไม่ได้รับ permission สำหรับ ${pattern} — ไปกรอก URL ใหม่ที่ popup แล้ว allow` },
+    };
+  }
   const headers = { ...(init.headers || {}) };
   if (apiKey) headers['X-API-Key'] = apiKey;
   const r = await fetch(`${base}${path}`, { ...init, headers });
