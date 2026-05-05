@@ -1,7 +1,7 @@
 #requires -Version 5.1
-# Build a Chrome Web Store submission zip for eclaim3-extension/.
+# Build a Chrome Web Store submission zip for se-key-extension/.
 # manifest.json must be at the ROOT of the zip (CWS requirement).
-# Output: eclaim3-extension-vX.Y.Z.zip in repo root.
+# Output: se-key-vX.Y.Z.zip in repo root.
 
 $ErrorActionPreference = 'Stop'
 
@@ -9,7 +9,7 @@ function Log    { param([string]$m) Write-Host "[ext-zip] $m" -ForegroundColor C
 function Fail   { param([string]$m) Write-Host "[fail   ] $m" -ForegroundColor Red; exit 1 }
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Src  = Join-Path $Root 'eclaim3-extension'
+$Src  = Join-Path $Root 'se-key-extension'
 
 if (-not (Test-Path $Src -PathType Container))         { Fail "missing folder: $Src" }
 if (-not (Test-Path "$Src\manifest.json" -PathType Leaf)) { Fail "missing $Src\manifest.json" }
@@ -18,7 +18,7 @@ $manifest = Get-Content "$Src\manifest.json" -Raw | ConvertFrom-Json
 $version  = $manifest.version
 if ([string]::IsNullOrWhiteSpace($version)) { Fail "could not read version from manifest.json" }
 
-$Out = Join-Path $Root "eclaim3-extension-v$version.zip"
+$Out = Join-Path $Root "se-key-v$version.zip"
 if (Test-Path $Out) { Remove-Item -Force $Out }
 
 Log "version: $version"

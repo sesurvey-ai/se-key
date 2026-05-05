@@ -1,11 +1,11 @@
 #requires -Version 5.1
-# Launch a fresh Chrome instance with eclaim3-extension/ pre-loaded.
+# Launch a fresh Chrome instance with se-key-extension/ pre-loaded.
 # Uses a separate user-data-dir so it does not touch your normal Chrome profile.
 
 $ErrorActionPreference = 'Stop'
 
 $Root      = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ExtPath   = Join-Path $Root 'eclaim3-extension'
+$ExtPath   = Join-Path $Root 'se-key-extension'
 $ProfDir   = Join-Path $env:TEMP 'eclaim3-test-profile'
 $ChromeExe = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
 if (-not (Test-Path $ChromeExe)) {

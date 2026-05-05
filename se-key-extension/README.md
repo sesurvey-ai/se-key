@@ -5,7 +5,7 @@ Chrome Extension (Manifest V3) ฝังเข้าหน้า eClaim3 — อ
 ## ติดตั้ง (unpacked)
 
 1. เปิด Chrome → `chrome://extensions` → เปิด **Developer mode**
-2. กด **Load unpacked** → เลือกโฟลเดอร์ `eclaim3-extension/` นี้
+2. กด **Load unpacked** → เลือกโฟลเดอร์ `se-key-extension/` นี้
 3. กดไอคอน extension → ตั้งค่า:
    - **LAN server URL** (เช่น `http://192.168.4.122:3100`)
    - **API key** ตรงกับ `SE_KEY_API_KEY` ของ server
@@ -16,7 +16,7 @@ Chrome Extension (Manifest V3) ฝังเข้าหน้า eClaim3 — อ
 ## ไฟล์
 
 ```
-eclaim3-extension/
+se-key-extension/
 ├── manifest.json      ← Manifest V3 config
 ├── background.js      ← Service worker: fetch proxy + save-many-and-flush
 ├── content.js         ← อ่าน DOM + floating panel + click handler + validation

@@ -38,7 +38,7 @@ log "creating ${OUT}..."
 rm -f "${OUT}"
 zip -qr "${OUT}" \
   server/ \
-  eclaim3-extension/ \
+  se-key-extension/ \
   README.md \
   -x 'server/node_modules/*' \
      'server/logs/*' \
@@ -47,7 +47,7 @@ zip -qr "${OUT}" \
      'server/*.db-wal' \
      'server/*.bak*' \
      '**/.DS_Store' \
-     'eclaim3-extension/.DS_Store'
+     'se-key-extension/.DS_Store'
 
 # 6. Report.
 OUT_SIZE=$(du -h "${OUT}" | awk '{print $1}')

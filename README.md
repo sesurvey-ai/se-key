@@ -145,7 +145,7 @@ Chrome Extension ฝังเข้าหน้า eClaim3 + Local LAN API (Expr
 
 **โครงสร้างไฟล์**
 ```
-eclaim3-extension/
+se-key-extension/
 ├── manifest.json         ← Manifest V3 config
 ├── content.js            ← อ่าน DOM + floating panel + click handler
 ├── content.css           ← สไตล์ panel
@@ -250,7 +250,7 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
   - [x] Import CSV จาก Google Sheets: 319,302 แถว → 1.7 วินาที
   - [x] Import xlsx `คีย์ข้อมูล.xlsx` เพิ่มเติม (+89 rows, `isurvey_sent=1`)
   - [x] Import xlsx `งานสร้างใหม่.xlsx` (+83 rows `isurvey_sent=0` + flip 1 row)
-- [x] **Chrome Extension v0.3.33** ([`eclaim3-extension/`](eclaim3-extension/))
+- [x] **Chrome Extension v0.4.4** ([`se-key-extension/`](se-key-extension/) — ชื่อใน Chrome: **SE-KEY**)
   - [x] Manifest V3 + host permissions + storage
   - [x] Floating panel — **แคบ 170px, ย่อเป็น default** (คลิก header ขยาย) ลากย้ายตำแหน่งได้
   - [x] Radio buttons: งานต้น / งานตาม / งานรวม / SESV + batch list
@@ -358,12 +358,21 @@ C:\se-key\service\se-key.exe uninstall   # ถอนทิ้ง
 
 ### 2. Deploy extension (ทุกเครื่อง user)
 
-1. `chrome://extensions/` → Developer mode → **Load unpacked** → เลือก `eclaim3-extension/`
-2. คลิก icon → ตั้งค่า:
-   - **LAN server URL**: `http://192.168.4.122:3100`
-   - **API key**: ค่าเดียวกับ `SE_KEY_API_KEY` ใน `.env`
-3. กด "ทดสอบ" → เห็น `เชื่อมได้ ✓ (rows = ...)` → กด "บันทึก"
-4. ทดสอบบนหน้า eClaim3 — floating panel ควรโผล่มุมขวาบน จุดสถานะเขียว
+มี 2 ทางเลือก:
+
+**A. Load unpacked (dev / LAN deploy)**
+1. `chrome://extensions/` → Developer mode → **Load unpacked** → เลือก `se-key-extension/`
+
+**B. Distribute zip / Chrome Web Store**
+1. Build: `pwsh ./build-extension-zip.ps1` (Windows) หรือ `bash ./build-extension-zip.sh` (Mac/Linux) → ได้ `se-key-v<version>.zip` ที่ root
+2. แจกจ่าย zip ให้ user แตกไฟล์แล้ว Load unpacked หรืออัปโหลดเข้า [Chrome Web Store devconsole](https://chrome.google.com/webstore/devconsole)
+
+ตั้งค่าหลังติดตั้ง:
+- หา extension ชื่อ **SE-KEY** ใน `chrome://extensions/` → คลิก icon → กรอก:
+  - **LAN server URL**: `http://192.168.4.122:3100`
+  - **API key**: ค่าเดียวกับ `SE_KEY_API_KEY` ใน `.env`
+- กด "ทดสอบ" → เห็น `เชื่อมได้ ✓ (rows = ...)` → กด "บันทึก"
+- ทดสอบบนหน้า eClaim3 — floating panel ควรโผล่มุมขวาบน จุดสถานะเขียว
 
 ### 3. เข้า Admin UI
 
@@ -373,7 +382,7 @@ C:\se-key\service\se-key.exe uninstall   # ถอนทิ้ง
 ### Upgrade ครั้งต่อไป
 
 Server-only changes: copy `server/src/*.js` + `server/public/*` ทับบน .122 → `C:\se-key\service\se-key.exe restart`
-Extension-only changes: copy `eclaim3-extension/*` แล้วทุกเครื่อง user กด Reload ที่ `chrome://extensions/`
+Extension-only changes: copy `se-key-extension/*` แล้วทุกเครื่อง user กด Reload ที่ `chrome://extensions/`
 
 ---
 
@@ -390,7 +399,7 @@ Extension-only changes: copy `eclaim3-extension/*` แล้วทุกเค�
 - Upstream ช้าเกิน → เพิ่ม `ISURVEY_TIMEOUT_MS` ใน `.env` เป็น 60000+ แล้ว restart server
 
 ### Extension ไม่ยิง POST เลย (แค่ GET /api/health)
-- Open browser DevTools → ดู console ว่า extension โหลดเวอร์ชันที่ถูกต้องไหม (`[SE Survey Helper] v0.3.xx loaded`)
+- Open browser DevTools → ดู console ว่า extension โหลดเวอร์ชันที่ถูกต้องไหม (`[SE Survey Helper] v0.4.x loaded`)
 - User click ปุ่มถูกไหม (`#btnSurvey_Update`, `#wuFlow1_cmdSendNew`, หรือ `#wuFlow1_cmdSendFollow`) — ถ้า eClaim3 เปลี่ยน id ต้องอัพเดต content.js
 
 ### Server ค้าง (ไม่ error แต่เปิด admin ไม่ได้ ต้อง restart)
