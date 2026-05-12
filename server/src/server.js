@@ -41,6 +41,11 @@ app.use((req, res, next) => {
 // in the X-API-Key header on every API call.
 app.use('/admin', express.static(path.join(__dirname, '..', 'public')));
 
+// Read-only detail view — /detail, /detail/… → server/public/detail/*.
+// Same auth model as /admin (static bypasses gate; page sends X-API-Key on API
+// calls). Loads admin.css from /admin/admin.css for shared styling.
+app.use('/detail', express.static(path.join(__dirname, '..', 'public', 'detail')));
+
 // API-key auth — shared header X-API-Key. Off if SE_KEY_API_KEY is empty
 // (backwards-compat: existing deployments keep working until the key is set).
 if (API_KEY) {

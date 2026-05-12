@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SE Survey — รายละเอียด (อ่านอย่างเดียว)</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <style>
+    /* Read-only page: slate header to visually distinguish from blue admin. */
+    .hdr { background: #455a64; }
+    .ro-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      margin-left: 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.18);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    /* Date filter row mirrors extension records.html layout. */
+    .controls-row2 { padding-top: 0; }
+    .date-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+    .date-input { padding: 6px 8px; border: 1px solid #c7d0da; border-radius: 6px; font-size: 13px; font-family: inherit; }
+    .spacer { flex: 1; }
+  </style>
+</head>
+<body>
+  <header class="hdr">
+    <h1>SE Survey — รายละเอียด <span class="ro-badge">อ่านอย่างเดียว</span></h1>
+    <div class="hdr-right">
+      <span id="conn-dot" class="conn-dot" title="สถานะ server"></span>
+      <span id="rows-total" class="rows-total">—</span>
+      <button id="btn-settings" class="btn btn-icon" type="button" title="ตั้งค่า API key">⚙</button>
+    </div>
+  </header>
+
+  <section class="controls">
+    <input type="search" id="q" class="q" placeholder="ค้นหา เลขเคลม / เซอร์เวย์ / ผู้คีย์ / invoice...">
+    <select id="work-type" class="sel">
+      <option value="">— ทุกประเภทงาน —</option>
+      <option value="งานต้น">งานต้น</option>
+      <option value="งานตาม">งานตาม</option>
+      <option value="งานรวม">งานรวม</option>
+      <option value="SESV">SESV</option>
+    </select>
+    <select id="status" class="sel">
+      <option value="">— ทุกสถานะ —</option>
+      <option value="0">รอส่ง</option>
+      <option value="1">ส่งแล้ว</option>
+    </select>
+    <select id="page-size" class="sel">
+      <option value="50">50 / หน้า</option>
+      <option value="100" selected>100 / หน้า</option>
+      <option value="250">250 / หน้า</option>
+      <option value="500">500 / หน้า</option>
+    </select>
+    <button id="btn-refresh" class="btn" type="button">รีเฟรช</button>
+  </section>
+
+  <section class="controls controls-row2">
+    <label class="date-label">ตั้งแต่
+      <input type="date" id="from-date" class="date-input">
+    </label>
+    <label class="date-label">ถึง
+      <input type="date" id="to-date" class="date-input">
+    </label>
+    <button id="btn-date-clear" class="btn btn-secondary" type="button">ล้างวันที่</button>
+    <span class="spacer"></span>
+    <button id="btn-export" class="btn" type="button">⬇ Export Excel</button>
+  </section>
+
+  <section class="summary"><span id="summary-text">กำลังโหลด...</span></section>
+
+  <section class="table-wrap">
+    <table id="records-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>เวลา</th>
+          <th>เลขเคลม</th>
+          <th>เลขเซอร์เวย์</th>
+          <th>ผู้คีย์</th>
+          <th>ประเภทงาน</th>
+          <th>invoice_mix</th>
+          <th>สถานะ</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+
+  <footer class="pager">
+    <button id="prev" class="btn" type="button">← ก่อนหน้า</button>
+    <span id="page-info" class="page-info">หน้า 1</span>
+    <button id="next" class="btn" type="button">ถัดไป →</button>
+  </footer>
+
+  <!-- API key settings modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>ตั้งค่า</h2>
+      <label>API key
+        <input type="text" id="f-apikey" placeholder="shared secret ตรงกับ SE_KEY_API_KEY ของ server">
+      </label>
+      <div class="form-actions">
+        <button type="button" id="btn-settings-cancel" class="btn btn-secondary">ยกเลิก</button>
+        <button type="button" id="btn-settings-save" class="btn btn-primary">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="detail.js"></script>
+</body>
+</html>
