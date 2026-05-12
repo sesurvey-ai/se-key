@@ -46,6 +46,15 @@ app.use('/admin', express.static(path.join(__dirname, '..', 'public')));
 // calls). Loads admin.css from /admin/admin.css for shared styling.
 app.use('/detail', express.static(path.join(__dirname, '..', 'public', 'detail')));
 
+// Health check — public (no API key required) so Docker/k8s probes and
+// Traefik can mark the container ready without leaking the shared secret
+// into the container's HEALTHCHECK command. Returns only a row count — no
+// sensitive data.
+app.get('/api/health', (_req, res) => {
+  const { count } = db.prepare('SELECT COUNT(*) AS count FROM records').get();
+  res.json({ ok: true, rows: count });
+});
+
 // API-key auth — shared header X-API-Key. Off if SE_KEY_API_KEY is empty
 // (backwards-compat: existing deployments keep working until the key is set).
 if (API_KEY) {
@@ -58,11 +67,6 @@ if (API_KEY) {
 } else {
   log.warn('auth.disabled', { reason: 'SE_KEY_API_KEY not set' });
 }
-
-app.get('/api/health', (_req, res) => {
-  const { count } = db.prepare('SELECT COUNT(*) AS count FROM records').get();
-  res.json({ ok: true, rows: count });
-});
 
 // List records (supports ?claim_no=, ?survey_no=, ?limit=, ?offset=, ?since_id=, ?q=, ?work_type=)
 // Extension uses ?claim_no=&survey_no= for duplicate checks;
