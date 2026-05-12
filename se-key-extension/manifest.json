@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "SE-KEY",
-  "version": "0.4.4",
-  "description": "คีย์ข้อมูลงานสำรวจจากหน้า eClaim3 ส่งเข้า LAN API server",
+  "version": "0.4.5",
+  "description": "คีย์ข้อมูลงานสำรวจจากหน้า eClaim3 ส่งเข้า API server (LAN หรือ cloud)",
   "permissions": ["storage"],
   "host_permissions": [
     "https://eclaim3.blueventuregroup.co.th/*"

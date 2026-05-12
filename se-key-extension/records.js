@@ -2,7 +2,7 @@
 // under chrome-extension:// so host_permissions cover it without mixed-content
 // blocks, unlike content scripts on https eClaim3 pages).
 
-const DEFAULT_SERVER = 'http://localhost:3000';
+const DEFAULT_SERVER = 'https://key.sesurvey.cloud';
 // Temporarily disabled — set to true to re-enable manual "ส่ง iSurvey" per row.
 const MANUAL_SEND_ENABLED = false;
 let apiKey = '';

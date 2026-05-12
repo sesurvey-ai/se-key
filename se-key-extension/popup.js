@@ -1,6 +1,6 @@
 // Build tag — read from manifest so it stays in sync automatically.
 const BUILD = `v${chrome.runtime.getManifest().version}`;
-const DEFAULT_SERVER = 'http://localhost:3000';
+const DEFAULT_SERVER = 'https://key.sesurvey.cloud';
 
 console.log('[popup] popup.js loaded', BUILD);
 

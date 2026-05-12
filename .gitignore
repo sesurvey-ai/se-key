@@ -19,6 +19,9 @@ server/logs/
 # One-off data files (business data — not for source control)
 *.xlsx
 
+# One-shot USB deploy bundles (rebuilt by scripts on demand)
+se-key-detail-deploy-*.zip
+
 # OS
 .DS_Store
 Thumbs.db

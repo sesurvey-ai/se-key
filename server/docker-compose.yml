@@ -1,0 +1,35 @@
+# Reference compose for local testing. On Dokploy, the UI handles
+# domain/TLS/env-vars — only the volume mount path /data needs to match.
+services:
+  se-key:
+    build: .
+    container_name: se-key
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - se-key-data:/data
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: 0.0.0.0
+      SE_KEY_DB: /data/data.db
+      SE_KEY_LOG_DIR: /data/logs
+      TZ: Asia/Bangkok
+      # Set the rest via .env or Dokploy UI (do NOT commit secrets):
+      # SE_KEY_API_KEY=<random 64-hex>
+      # ISURVEY_USER_ID=sesurvey
+      # ISURVEY_PASSWORD=<secret>
+      # ISURVEY_TIMEOUT_MS=60000
+      # RETRY_ENABLED=0
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  se-key-data:

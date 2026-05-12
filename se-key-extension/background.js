@@ -1,8 +1,8 @@
-// Background service worker — proxies LAN API calls so that content scripts
-// on an HTTPS page (eClaim3) can reach an HTTP LAN server without hitting
-// mixed-content blocks. Content scripts talk to this via chrome.runtime.sendMessage.
+// Background service worker — proxies API calls so content scripts on an
+// HTTPS page (eClaim3) can reach the API without CORS/mixed-content issues.
+// Content scripts talk to this via chrome.runtime.sendMessage.
 
-const DEFAULT_SERVER = 'http://localhost:3000';
+const DEFAULT_SERVER = 'https://key.sesurvey.cloud';
 
 async function getConfig() {
   const { serverUrl, apiKey } = await chrome.storage.local.get({
