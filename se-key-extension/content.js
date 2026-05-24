@@ -437,12 +437,14 @@
   // block so users get immediate feedback before eClaim3 postback (server is
   // backstop). Empty survey_no is also rejected (covers cases where the page
   // hasn't loaded a survey yet or the user is on a claim without one).
-  const SURVEY_NO_RE = /^(SEABI|SETP|SESV|SEAIO)-\d+$/;
+  // SEAIO uses a 3-part shape with a region segment (BKK/AYA/RYG/... or R14/P28).
+  const SURVEY_NO_RE = /^(?:SEABI-\d+|SETP-\d+|SESV-\d+|SEAIO-[A-Z0-9]+-\d+)$/;
+  const FORMAT_HINT  = 'ต้องเป็น SEABI-/SETP-/SESV- ตามด้วยตัวเลข, หรือ SEAIO-<region>-<digits>';
   function validateSurveyFormat() {
     if (!SURVEY_NO_RE.test(state.surveyNo || '')) {
       return {
         ok: false,
-        error: `เลขเซอร์เวย์ผิด format: ต้องเป็น SEABI-/SETP-/SESV-/SEAIO- ตามด้วยตัวเลข (ตอนนี้: "${state.surveyNo || '(ว่าง)'}")`,
+        error: `เลขเซอร์เวย์ผิด format: ${FORMAT_HINT} (ตอนนี้: "${state.surveyNo || '(ว่าง)'}")`,
       };
     }
     if (state.batchMode === 'งานรวม') {
@@ -452,7 +454,7 @@
         if (v && !SURVEY_NO_RE.test(v)) {
           return {
             ok: false,
-            error: `เลข invoice "${v}" ผิด format (ต้องเป็น SEABI-/SETP-/SESV-/SEAIO- ตามด้วยตัวเลข)`,
+            error: `เลข invoice "${v}" ผิด format (${FORMAT_HINT})`,
             focus: inp,
           };
         }
