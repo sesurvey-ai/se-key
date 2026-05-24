@@ -433,6 +433,34 @@
     return { ok: true };
   }
 
+  // Survey-number format check — mirrors server/src/validate.js. Client-side
+  // block so users get immediate feedback before eClaim3 postback (server is
+  // backstop). Empty survey_no is also rejected (covers cases where the page
+  // hasn't loaded a survey yet or the user is on a claim without one).
+  const SURVEY_NO_RE = /^(SEABI|SETP|SESV|SEAIO)-\d+$/;
+  function validateSurveyFormat() {
+    if (!SURVEY_NO_RE.test(state.surveyNo || '')) {
+      return {
+        ok: false,
+        error: `เลขเซอร์เวย์ผิด format: ต้องเป็น SEABI-/SETP-/SESV-/SEAIO- ตามด้วยตัวเลข (ตอนนี้: "${state.surveyNo || '(ว่าง)'}")`,
+      };
+    }
+    if (state.batchMode === 'งานรวม') {
+      const inputs = [...els.mixList.querySelectorAll('.se-mix-input')];
+      for (const inp of inputs) {
+        const v = inp.value.trim();
+        if (v && !SURVEY_NO_RE.test(v)) {
+          return {
+            ok: false,
+            error: `เลข invoice "${v}" ผิด format (ต้องเป็น SEABI-/SETP-/SESV-/SEAIO- ตามด้วยตัวเลข)`,
+            focus: inp,
+          };
+        }
+      }
+    }
+    return { ok: true };
+  }
+
   // --- Submit buttons --------------------------------------------------
   // Capture-phase click handler fires the save via the background worker at
   // click time, before eClaim3 postback navigates the page. We no longer wait
@@ -467,6 +495,19 @@
     }
 
     if (state.claimNo && state.keyer) {
+      // Format gate — block click if survey_no / any batch invoice is the
+      // wrong shape. Mirrors server-side validate.js. Runs after batch-empty
+      // gate so user fixes "empty" first, then "format" if applicable.
+      const fmt = validateSurveyFormat();
+      if (!fmt.ok) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setCollapsed(false);
+        setStatus(fmt.error, 'err');
+        if (fmt.focus) fmt.focus.focus();
+        return;
+      }
+
       // Optimistically paint 🟠/🟢 in the submit status row.
       state.lastSavedAt    = Date.now();
       state.lastSavedSrc   = src;

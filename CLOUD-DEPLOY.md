@@ -155,11 +155,11 @@ Open `https://key.sesurvey.cloud/admin/` and scroll — recent records should ma
 
 ## Phase 4 — Cutover: switch users from LAN → cloud
 
-### 4a. Distribute extension v0.4.5
+### 4a. Distribute extension v0.4.6
 Two paths:
 
-- **Chrome Web Store**: upload `se-key-v0.4.5.zip` (already built at repo root). After CWS approves, all user installs auto-update within a few hours.
-- **Manual** (faster): give users `se-key-v0.4.5.zip` → they extract → `chrome://extensions/` → remove old, **Load unpacked** new folder.
+- **Chrome Web Store**: upload `se-key-v0.4.6.zip` (already built at repo root). After CWS approves, all user installs auto-update within a few hours.
+- **Manual** (faster): give users `se-key-v0.4.6.zip` → they extract → `chrome://extensions/` → remove old, **Load unpacked** new folder.
 
 ### 4b. Each user updates the URL once
 After updating, each user opens the popup:
@@ -168,7 +168,7 @@ After updating, each user opens the popup:
 3. Click **ทดสอบ** → must turn green
 4. Click **บันทึก**
 
-> Existing users will still have the old LAN URL in their `chrome.storage.local` even after the v0.4.5 upgrade — they MUST change it manually via popup. The `DEFAULT_SERVER` constant only applies to fresh installs.
+> Existing users will still have the old LAN URL in their `chrome.storage.local` even after the v0.4.6 upgrade — they MUST change it manually via popup. The `DEFAULT_SERVER` constant only applies to fresh installs.
 
 ### 4c. Smoke test from a real user machine
 Open eClaim3 → load any case with claim+survey → floating panel should show server connected (green dot) → press "บันทึกราคา" → check `https://key.sesurvey.cloud/admin/` to see the new row.

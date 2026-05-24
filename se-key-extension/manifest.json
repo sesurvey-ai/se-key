@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SE-KEY",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "คีย์ข้อมูลงานสำรวจจากหน้า eClaim3 ส่งเข้า API server (LAN หรือ cloud)",
   "permissions": ["storage"],
   "host_permissions": [

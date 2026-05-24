@@ -7,6 +7,7 @@ import { db, initSchema } from './db.js';
 import { sendRecordToIsurvey } from './send-isurvey.js';
 import { startRetryLoop } from './retry.js';
 import { log } from './logger.js';
+import { isValidSurveyNo, SURVEY_NO_FORMAT_HINT } from './validate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -290,6 +291,19 @@ app.post('/api/records', (req, res) => {
     });
   }
 
+  // survey_no must match the prefix-#### format (required, non-empty).
+  // invoice_mix is optional — empty is fine — but if present must also match.
+  if (!isValidSurveyNo(clean.survey_no)) {
+    return res.status(400).json({
+      error: `survey_no ${SURVEY_NO_FORMAT_HINT} (got "${clean.survey_no}")`,
+    });
+  }
+  if (clean.invoice_mix && !isValidSurveyNo(clean.invoice_mix)) {
+    return res.status(400).json({
+      error: `invoice_mix ${SURVEY_NO_FORMAT_HINT} (got "${clean.invoice_mix}")`,
+    });
+  }
+
   // upsert_pending = true (extension buttons: บันทึกราคา / ส่งงานใหม่):
   //   1. If (claim, survey) already has isurvey_sent=1 → short-circuit. Extension
   //      shouldn't be able to re-save or re-send already-flushed work — returning
@@ -359,6 +373,23 @@ app.patch('/api/records/:id', (req, res) => {
   if (merged.work_type === 'SESV' && !merged.invoice_mix) {
     return res.status(400).json({
       error: 'SESV records require invoice_mix (the linked SEABI invoice)',
+    });
+  }
+
+  // Format check — only on fields actually being changed. Lets admins fix
+  // other fields (e.g. flip isurvey_sent) on legacy bad-format rows without
+  // having to clean up survey_no first.
+  if (Object.prototype.hasOwnProperty.call(params, 'survey_no')
+      && !isValidSurveyNo(params.survey_no)) {
+    return res.status(400).json({
+      error: `survey_no ${SURVEY_NO_FORMAT_HINT} (got "${params.survey_no}")`,
+    });
+  }
+  if (Object.prototype.hasOwnProperty.call(params, 'invoice_mix')
+      && params.invoice_mix
+      && !isValidSurveyNo(params.invoice_mix)) {
+    return res.status(400).json({
+      error: `invoice_mix ${SURVEY_NO_FORMAT_HINT} (got "${params.invoice_mix}")`,
     });
   }
 

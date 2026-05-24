@@ -121,10 +121,10 @@ Dashboard: https://chrome.google.com/webstore/devconsole
 
 ## Submission checklist
 
-- [x] manifest.json bump เป็น `0.4.5` แล้ว
+- [x] manifest.json bump เป็น `0.4.6` แล้ว
 - [x] manifest.name = `SE-KEY`
 - [x] ทดสอบ unpacked load → permission request flow ทำงาน → fetch cloud ปกติ
 - [x] Privacy policy host ที่ public URL แล้ว (GitHub)
 - [ ] Screenshots ถ่ายครบ (≥1 รูป) — **TODO ก่อน submit**
-- [x] Build ZIP — `se-key-v0.4.5.zip` พร้อม
+- [x] Build ZIP — `se-key-v0.4.6.zip` พร้อม
 - [ ] Upload ZIP, paste copy จากไฟล์นี้, set Visibility = Unlisted, Submit for review
