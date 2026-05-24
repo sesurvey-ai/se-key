@@ -435,11 +435,10 @@
 
   // Survey-number format check — mirrors server/src/validate.js. Client-side
   // block so users get immediate feedback before eClaim3 postback (server is
-  // backstop). Empty survey_no is also rejected (covers cases where the page
-  // hasn't loaded a survey yet or the user is on a claim without one).
-  // SEAIO uses a 3-part shape with a region segment (BKK/AYA/RYG/... or R14/P28).
-  const SURVEY_NO_RE = /^(?:SEABI-\d+|SETP-\d+|SESV-\d+|SEAIO-[A-Z0-9]+-\d+)$/;
-  const FORMAT_HINT  = 'ต้องเป็น SEABI-/SETP-/SESV- ตามด้วยตัวเลข, หรือ SEAIO-<region>-<digits>';
+  // backstop). Strict digit counts confirmed against prod DB:
+  //   SEABI-<12d> | SETP-<8d> | SESV-<8d> | SEAIO-<3char region>-<9d>
+  const SURVEY_NO_RE = /^(?:SEABI-\d{12}|SETP-\d{8}|SESV-\d{8}|SEAIO-[A-Z0-9]{3}-\d{9})$/;
+  const FORMAT_HINT  = 'ต้องเป็น SEABI-<12 หลัก>, SETP-<8 หลัก>, SESV-<8 หลัก>, หรือ SEAIO-<region 3 ตัว>-<9 หลัก>';
   function validateSurveyFormat() {
     if (!SURVEY_NO_RE.test(state.surveyNo || '')) {
       return {
