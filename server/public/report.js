@@ -227,6 +227,19 @@ const today = todayYMD();
 els.fromDate.value = today;
 els.toDate.value   = today;
 
+// Auto-refresh every 5 minutes. Skips when the tab is hidden (background) so
+// we don't pile up requests on a forgotten tab — when the user comes back,
+// the visibilitychange handler triggers an immediate load.
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+setInterval(() => {
+  if (!state.apiKey || state.loading || document.hidden) return;
+  load();
+}, AUTO_REFRESH_MS);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.apiKey && !state.loading) load();
+});
+
 // First load — if no API key yet, open settings modal first.
 if (!state.apiKey) {
   openModal(els.settingsModal);
