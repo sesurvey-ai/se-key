@@ -227,6 +227,62 @@ app.get('/api/records/export', async (req, res) => {
   log.info('export.xlsx', { count, filename });
 });
 
+// Per-keyer report — aggregate counts grouped by keyer. Pure SQL aggregate so
+// large tables (300k+ rows) stay fast — no row materialization in Node.
+// Filters: from_date, to_date (YYYY-MM-DD; to_date extended to end-of-day to
+// match GET /api/records behavior), work_type.
+// Empty/whitespace keyers are bucketed as "(ไม่ระบุ)" so a missing keyer field
+// doesn't fragment the report into hundreds of empty-string rows.
+app.get('/api/reports/by-keyer', (req, res) => {
+  const where = [];
+  const params = {};
+  if (req.query.from_date) {
+    where.push('created_at >= @from_date');
+    params.from_date = String(req.query.from_date);
+  }
+  if (req.query.to_date) {
+    where.push('created_at <= @to_date');
+    params.to_date = String(req.query.to_date) + ' 23:59:59.999999';
+  }
+  if (req.query.work_type) {
+    where.push('work_type = @work_type');
+    params.work_type = String(req.query.work_type);
+  }
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const KEYER_EXPR = "COALESCE(NULLIF(TRIM(keyer), ''), '(ไม่ระบุ)')";
+
+  const rows = db.prepare(`
+    SELECT
+      ${KEYER_EXPR}                                       AS keyer,
+      COUNT(*)                                            AS total,
+      SUM(CASE WHEN isurvey_sent = 1 THEN 1 ELSE 0 END)   AS sent,
+      SUM(CASE WHEN isurvey_sent = 0 THEN 1 ELSE 0 END)   AS pending,
+      SUM(CASE WHEN work_type = 'งานต้น' THEN 1 ELSE 0 END) AS wt_ton,
+      SUM(CASE WHEN work_type = 'งานตาม' THEN 1 ELSE 0 END) AS wt_tam,
+      SUM(CASE WHEN work_type = 'งานรวม' THEN 1 ELSE 0 END) AS wt_ruam,
+      SUM(CASE WHEN work_type = 'SESV'   THEN 1 ELSE 0 END) AS wt_sesv,
+      MIN(created_at)                                     AS first_keyed_at,
+      MAX(created_at)                                     AS last_keyed_at
+    FROM records
+    ${whereSql}
+    GROUP BY ${KEYER_EXPR}
+    ORDER BY total DESC, keyer ASC
+  `).all(params);
+
+  const totals = db.prepare(`
+    SELECT
+      COUNT(*)                                            AS grand_total,
+      SUM(CASE WHEN isurvey_sent = 1 THEN 1 ELSE 0 END)   AS grand_sent,
+      SUM(CASE WHEN isurvey_sent = 0 THEN 1 ELSE 0 END)   AS grand_pending,
+      COUNT(DISTINCT ${KEYER_EXPR})                       AS keyer_count
+    FROM records
+    ${whereSql}
+  `).get(params);
+
+  res.json({ rows, totals, filters: { ...params } });
+});
+
 const insertStmt = db.prepare(`
   INSERT INTO records (claim_no, survey_no, keyer, work_type, invoice_mix, isurvey_sent)
   VALUES (@claim_no, @survey_no, @keyer, @work_type, @invoice_mix, 0)

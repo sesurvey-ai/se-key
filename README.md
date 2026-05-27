@@ -170,6 +170,7 @@ se-key-extension/
 | `PATCH` | `/api/records/:id` | แก้ไข (claim_no, survey_no, keyer, work_type, invoice_mix, isurvey_sent) |
 | `DELETE` | `/api/records/:id` | ลบ |
 | `POST` | `/api/send-isurvey` | proxy ส่งไป iSurvey upstream |
+| `GET` | `/api/reports/by-keyer` | aggregate ผลงานต่อ keyer (filter: from_date / to_date / work_type) |
 | `GET` | `/admin/*` | static admin UI (served โดยไม่ต้อง API key) |
 
 **Auth**
@@ -209,6 +210,17 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
 **ปุ่ม + เพิ่ม**: modal form กรอกได้ทุก field
 
 ⚠️ ปุ่ม "ส่งซ้ำ" บน row `isurvey_sent=1` จะ**ไม่ยิง iSurvey จริง** (server short-circuit `alreadySent`) — ถ้าต้องการส่งซ้ำจริง: แก้สถานะเป็น "รอส่ง" ก่อน
+
+### 4. Report Page (`/admin/report.html`)
+
+หน้ารายงานผลงานรายผู้คีย์ — เข้าได้จากปุ่ม **📊 รายงาน** บน header ของทั้ง `/admin/` และ `/detail/`
+
+- **Default**: แสดงข้อมูลของวันนี้ — ผู้ใช้เปลี่ยนวันที่ได้เอง หรือกด "ล้างวันที่" เพื่อดูทั้งหมด
+- **Filter**: ช่วงวันที่ (from/to) + ประเภทงาน (งานต้น/ตาม/รวม/SESV)
+- **Stats**: จำนวนผู้คีย์ / รวมทั้งหมด / ส่งแล้ว / รอส่ง
+- **ตาราง**: ผู้คีย์ / รวม / ส่งแล้ว / รอส่ง / breakdown ตาม work_type / คีย์ครั้งล่าสุด (sort desc ตาม total)
+- **กราฟ**: Top 15 horizontal stacked bar (SVG, ไม่พึ่ง chart lib) — สีเขียว = ส่งแล้ว, สีส้ม = รอส่ง
+- **Aggregation**: คำนวณฝั่ง SQL ครั้งเดียว (`SUM(CASE WHEN ...)`) — ไม่ดึง row ทั้งหมดมานับใน Node, รองรับ 320k+ rows ได้สบาย
 
 ---
 
@@ -274,6 +286,11 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
   - [x] **Add/Edit/Delete** modal forms
   - [x] ปุ่ม iSurvey / ส่งซ้ำ ต่อแถว
   - [x] API key เก็บใน `localStorage` — ตั้งครั้งเดียวจำตลอด
+- [x] **Report Page** ([`server/public/report.html`](server/public/report.html))
+  - [x] Per-keyer aggregate (total / sent / pending / breakdown by work_type)
+  - [x] Filter ช่วงวันที่ + work_type, default = วันนี้
+  - [x] Top 15 stacked bar chart (SVG, zero deps)
+  - [x] เข้าได้จากปุ่ม 📊 รายงาน ทั้งบน `/admin/` และ `/detail/`
 
 ### ยังเหลือ / optional
 
@@ -281,7 +298,7 @@ Indexes: `claim_no`, `survey_no`, `created_at`, `(isurvey_sent, work_type)`
 - [x] **Firewall rule inbound port 3100** บน .122 — เปิดแล้ว (23 เม.ย. 2026)
 - [x] **ISURVEY_TIMEOUT_MS=60000** (60s แทน 15s default) — ทนต่อ upstream ช้า
 - [x] **Deployed all updates** (23 เม.ย. 2026): server short-circuit + extension v0.3.33 บนเครื่อง user ครบทุกเครื่อง
-- [ ] Dashboard ดูสถิติย้อนหลัง (optional)
+- [ ] Dashboard ดูสถิติย้อนหลังเพิ่มเติม (timeline chart รายวัน, top claim_no etc.) (optional)
 
 ---
 
